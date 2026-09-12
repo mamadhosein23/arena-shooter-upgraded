@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>آرنا شوتر — نسخه کامل</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0b0e14; overflow: hidden;
+    font-family: 'Vazirmatn', 'Segoe UI', Tahoma, 'Consolas', monospace;
+    color: #e2e8f0; cursor: crosshair; user-select: none;
+  }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 14px; right: 18px; text-align: right;
+    font-size: 17px; pointer-events: none;
+    text-shadow: 0 2px 6px rgba(0,0,0,.9); line-height: 1.7;
+  }
+  #hud .row { display:flex; gap:8px; justify-content:flex-end; align-items:center; }
+  #hpBar {
+    width: 230px; height: 12px; background: rgba(255,255,255,.12);
+    border-radius: 6px; overflow: hidden; margin-top: 6px; direction: ltr;
+  }
+  #hpFill { height: 100%; width: 100%; background: #4ade80; transition: width .12s linear, background .2s; }
+  #weaponBox { margin-top: 8px; font-size: 15px; color: #fde047; }
+  #waveBox { margin-top: 4px; font-size: 15px; color: #38bdf8; }
+  #waveBar { width: 230px; height: 6px; background: rgba(255,255,255,.1); border-radius: 3px; overflow:hidden; margin-top:4px; direction:ltr;}
+  #waveFill { height:100%; width:0%; background:#38bdf8; transition: width .3s; }
+  #overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(8,10,16,.86); z-index: 10;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h1 { font-size: 54px; letter-spacing: 2px; margin-bottom: 8px; }
+  #overlay p { font-size: 19px; opacity: .85; margin-top: 6px; }
+  #upgradeCards { display: flex; gap: 18px; margin-top: 26px; flex-wrap: wrap; justify-content: center; }
+  .card {
+    width: 190px; padding: 18px 14px; background: rgba(56,189,248,.08);
+    border: 2px solid rgba(56,189,248,.45); border-radius: 14px;
+    cursor: pointer; transition: transform .12s, background .12s;
+  }
+  .card:hover { transform: translateY(-4px); background: rgba(56,189,248,.2); }
+  .card .num { font-size: 26px; color: #38bdf8; }
+  .card .name { font-size: 18px; margin-top: 6px; }
+  .card .desc { font-size: 13px; opacity: .7; margin-top: 6px; line-height: 1.5; }
+  #waveMsg {
+    position: fixed; top: 40%; left: 0; right: 0; text-align: center;
+    font-size: 42px; color: #38bdf8; pointer-events: none; opacity: 0;
+    text-shadow: 0 0 22px rgba(56,189,248,.8); transition: opacity .3s; z-index: 5;
+  }
+  #pauseTag { position: fixed; top: 14px; left: 18px; font-size: 15px; opacity: .55; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div class="row">امتیاز: <span id="score">0</span> &nbsp;|&nbsp; رکورد: <span id="best">0</span></div>
+  <div id="hpBar"><div id="hpFill"></div></div>
+  <div id="weaponBox"></div>
+  <div id="waveBox"></div>
+  <div id="waveBar"><div id="waveFill"></div></div>
+</div>
+
+<div id="pauseTag">Escape = توقف / ادامه</div>
+<div id="waveMsg"></div>
+
+<div id="overlay" class="hidden">
+  <h1 id="ovTitle"></h1>
+  <p id="ovText"></p>
+  <div id="upgradeCards"></div>
+  <small id="ovHint" style="margin-top:26px; opacity:.55"></small>
+</div>
+
+<script>
+"use strict";
+
+/* ============ 0. SETUP ============ */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const TAU = Math.PI * 2;
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ============ 1. INPUT ============ */
+const keys = Object.create(null);
+const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2, down: false };
+
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Escape' && !game.isGameOver && !game.upgrading) togglePause();
+  if (e.code === 'KeyR' && game.isGameOver) resetGame();
+  if (game.upgrading) {
+    if (e.code === 'Digit1') pickUpgrade(0);
+    if (e.code === 'Digit2') pickUpgrade(1);
+    if (e.code === 'Digit3') pickUpgrade(2);
+  } else if (!game.isGameOver && !game.paused) {
+    const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+    if (idx >= 0) switchWeapon(idx);
+  }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+});
+canvas.addEventListener('mousedown', () => {
+  if (game.isGameOver) { resetGame(); return; }
+  if (!game.paused && !game.upgrading) mouse.down = true;
+});
+window.addEventListener('mouseup', () => { mouse.down = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ============ 2. WEAPONS ============ */
+const WEAPONS = [
+  { name: 'کلت',    key: 'Pistol',  cooldown: 160, ammo: Infinity, damage: 1, color: '#fde047', bulletSpeed: 800, spread: 0,     pellets: 1, kind: 'bullet' },
+  { name: 'شاتگان', key: 'Shotgun', cooldown: 650, ammo: 24,       damage: 1, color: '#fb923c', bulletSpeed: 720, spread: 0.30,  pellets: 6, kind: 'bullet' },
+  { name: 'لیزر',   key: 'Laser',   cooldown: 240, ammo: Infinity, damage: 3, color: '#22d3ee', bulletSpeed: 0,   spread: 0,     pellets: 1, kind: 'laser', laserLife: 0.09 },
+  { name: 'راکت',   key: 'Rocket',  cooldown: 950, ammo: 8,        damage: 3, color: '#f43f5e', bulletSpeed: 520, spread: 0,     pellets: 1, kind: 'rocket', blastRadius: 110, blastDamage: 4 }
+];
+
+/* ============ 3. STATE ============ */
+let player, bullets, enemies, particles, rings, floaters, enemyBullets, lasers, game;
+let weaponIdx = 0, weaponCooldown = 0, currentChoices = [];
+
+function freshGame() {
+  return {
+    score: 0,
+    best: Number(localStorage.getItem('arenaBest') || 0),
+    isGameOver: false, paused: false, upgrading: false,
+    wave: 0, waveEnemiesLeft: 0, waveTotal: 0, toSpawn: 0,
+    spawnQueue: [], spawnTimer: 0,
+    betweenWaves: false, betweenTimer: 0,
+    shake: 0,
+    upgrades: { maxHp: 0, speed: 0, fireRate: 0, damage: 0, bulletSpeed: 0, lifesteal: 0, cd: 0 }
+  };
+}
+
+function resetGame() {
+  game = freshGame();
+  player = { x: W / 2, y: H / 2, r: 16, angle: 0, iFrames: 0, hp: 100, maxHp: 100 };
+  bullets = []; enemies = []; particles = []; rings = [];
+  floaters = []; enemyBullets = []; lasers = [];
+  weaponIdx = 0; weaponCooldown = 0;
+  hideOverlay();
+  startNextWave();
+  syncUI();
+}
+
+function maxHp()       { return 100 + game.upgrades.maxHp * 25; }
+function playerSpeed() { return 320 + game.upgrades.speed * 40; }
+function dmgMul()      { return 1 + game.upgrades.damage * 0.35; }
+function bulletSpdMul(){ return 1 + game.upgrades.bulletSpeed * 0.18; }
+function cdMul()       { return Math.pow(0.82, game.upgrades.cd); }
+function lifestealChance() { return game.upgrades.lifesteal * 0.15; }
+
+/* ============ 4. WAVES ============ */
+function waveComposition(w) {
+  const comp = { normal: Math.max(3, w * 2 - 3), fast: 0, tank: 0, bomber: 0, shooter: 0 };
+  if (w >= 2) comp.fast    = 1 + Math.floor(w * 0.8);
+  if (w >= 3) comp.bomber  = Math.floor(w / 2);
+  if (w >= 4) comp.shooter = Math.floor(w / 3) + 1;
+  if (w >= 5) comp.tank    = Math.floor((w - 3) / 2);
+  const list = [];
+  for (const t in comp) for (let i = 0; i < comp[t]; i++) list.push(t);
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+function startNextWave() {
+  game.wave++;
+  game.spawnQueue = waveComposition(game.wave);
+  game.waveTotal = game.spawnQueue.length;
+  game.waveEnemiesLeft = game.waveTotal;
+  game.toSpawn = game.waveTotal;
+  game.spawnTimer = 0;
+  game.betweenWaves = false;
+  showWaveMsg('موج ' + game.wave + ' شروع شد!');
+  syncUI();
+}
+
+function onEnemyKilled() {
+  game.waveEnemiesLeft--;
+  if (game.waveEnemiesLeft <= 0 && !game.isGameOver && !game.betweenWaves) {
+    const bonus = 50 * game.wave;
+    game.score += bonus;
+    addFloater(player.x, player.y - 40, '+' + bonus + ' پاک‌سازی موج', '#38bdf8');
+    game.betweenWaves = true;
+    game.betweenTimer = 1.2; // مکث کوتاه سپس صفحه ارتقا
+  }
+}
+
+function showWaveMsg(txt) {
+  const el = document.getElementById('waveMsg');
+  el.textContent = txt;
+  el.style.opacity = 1;
+  clearTimeout(showWaveMsg._t);
+  showWaveMsg._t = setTimeout(() => { el.style.opacity = 0; }, 1600);
+}
+
+/* ============ 5. UPGRADES ============ */
+const UPGRADE_POOL = [
+  { name: 'جان بیشتر',    desc: '+۲۵ حداکثر جان و پر شدن آن', apply: () => { game.upgrades.maxHp++; player.maxHp = maxHp(); player.hp = player.maxHp; } },
+  { name: 'سرعت حرکت',    desc: '+۴۰ سرعت جابجایی', apply: () => { game.upgrades.speed++; } },
+  { name: 'نرخ شلیک',     desc: '۱۵٪ شلیک سریع‌تر', apply: () => { game.upgrades.fireRate++; } },
+  { name: 'آسیب بیشتر',   desc: '۳۵٪ آسیب گلوله‌ها', apply: () => { game.upgrades.damage++; } },
+  { name: 'سرعت گلوله',   desc: '۱۸٪ سرعت پروژه‌ها', apply: () => { game.upgrades.bulletSpeed++; } },
+  { name: 'خون‌آشامی',    desc: '۱۵٪ شانس بازگشت ۴ جان با هر کشتن', apply: () => { game.upgrades.lifesteal++; } },
+  { name: 'کاهش کول‌داون', desc: 'لیزر و راکت ۱۸٪ سریع‌تر آماده می‌شوند', apply: () => { game.upgrades.cd++; } }
+];
+
+function offerUpgrades() {
+  game.upgrading = true;
+  const pool = UPGRADE_POOL.slice();
+  currentChoices = [];
+  while (currentChoices.length < 3 && pool.length) {
+    currentChoices.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  const box = document.getElementById('upgradeCards');
+  box.innerHTML = '';
+  box.style.display = 'flex';
+  currentChoices.forEach((u, i) => {
+    const d = document.createElement('div');
+    d.className = 'card';
+    d.innerHTML = '<div class="num">' + (i + 1) + '</div><div class="name">' + u.name +
+                  '</div><div class="desc">' + u.desc + '</div>';
+    d.addEventListener('click', () => pickUpgrade(i));
+    box.appendChild(d);
+  });
+  showOverlay('ارتقا انتخاب کن!', 'موج ' + game.wave + ' پاک شد — یکی از سه ارتقا را بردار');
+}
+
+function pickUpgrade(i) {
+  if (!game.upgrading || !currentChoices[i]) return;
+  currentChoices[i].apply();
+  game.upgrading = false;
+  hideOverlay();
+  startNextWave();
+}
+
+/* ============ 6. OVERLAY / UI ============ */
+function showOverlay(title, text) {
+  document.getElementById('ovTitle').textContent = title;
+  document.getElementById('ovText').textContent = text;
+  document.getElementById('ovHint').textContent = '';
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function hideOverlay() { document.getElementById('overlay').classList.add('hidden'); }
+
+function gameOver() {
+  game.isGameOver = true;
+  let newRecord = false;
+  if (game.score > game.best) {
+    game.best = game.score;
+    localStorage.setItem('arenaBest', String(game.best));
+    newRecord = true;
+  }
+  document.getElementById('upgradeCards').style.display = 'none';
+  document.getElementById('ovHint').textContent = 'برای شروع دوباره کلیک کن یا R را بزن';
+  showOverlay('GAME OVER',
+    'امتیاز نهایی: ' + game.score +
+    (newRecord ? ' — 🎉 رکورد جدید!' : ' — رکورد: ' + game.best));
+  burst(player.x, player.y, '#ef4444', 40, 320);
+  game.shake = 20;
+  syncUI();
+}
+
+function togglePause() {
+  game.paused = !game.paused;
+  if (game.paused) {
+    document.getElementById('upgradeCards').style.display = 'none';
+    showOverlay('توقف', 'برای ادامه Escape را بزن');
+  } else {
+    hideOverlay();
+  }
+}
+
+function syncUI() {
+  if (!player || !game) return;
+  document.getElementById('score').textContent = game.score;
+  document.getElementById('best').textContent = game.best;
+  const pct = clamp(player.hp / player.maxHp * 100, 0, 100);
+  const fill = document.getElementById('hpFill');
+  fill.style.width = pct + '%';
+  fill.style.background = pct > 55 ? '#4ade80' : pct > 25 ? '#facc15' : '#ef4444';
+  const w = WEAPONS[weaponIdx];
+  const ammoTxt = w.ammo === Infinity ? '∞' : w.ammo;
+  document.getElementById('weaponBox').textContent =
+    'سلاح [' + (weaponIdx + 1) + ']: ' + w.name + ' — مهمات: ' + ammoTxt;
+  document.getElementById('waveBox').textContent =
+    'موج ' + game.wave + ' — دشمنان باقی‌مانده: ' + Math.max(0, game.waveEnemiesLeft);
+  const done = game.waveTotal - Math.max(0, game.waveEnemiesLeft);
+  document.getElementById('waveFill').style.width =
+    (game.waveTotal ? done / game.waveTotal * 100 : 0) + '%';
+}
+
+/* ============ 7. EFFECTS ============ */
+const FX_COLORS = ['#f43f5e', '#facc15', '#38bdf8', '#a78bfa', '#4ade80', '#fb923c'];
+
+function burst(x, y, color, n, speed) {
+  n = n || 14; speed = speed || 240;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU;
+    const s = rand(0.25, 1) * speed;
+    particles.push({
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 1, decay: rand(1.6, 2.6), r: rand(1, 3.5),
+      color: Math.random() < 0.4 ? FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)] : color
+    });
+  }
+}
+function ring(x, y, color, maxR, width) {
+  rings.push({ x, y, r: 6, maxR: maxR || 70, width: width || 4, color, life: 1 });
+}
+function addFloater(x, y, text, color) {
+  floaters.push({ x, y, text, color, life: 1 });
+}
+
+/* ============ 8. ENEMIES ============ */
+const ENEMY_TYPES = {
+  normal:  { hp: 2, speed: [70, 120],  r: 18, score: 10, color: '#f43f5e', dmg: 10 },
+  fast:    { hp: 1, speed: [190, 240], r: 12, score: 15, color: '#facc15', dmg: 8  },
+  tank:    { hp: 8, speed: [40, 60],   r: 28, score: 30, color: '#a78bfa', dmg: 22 },
+  bomber:  { hp: 2, speed: [110, 150], r: 15, score: 20, color: '#fb923c', dmg: 12 },
+  shooter: { hp: 3, speed: [55, 85],   r: 16, score: 25, color: '#22d3ee', dmg: 10 }
+};
+
+function spawnEnemy(type) {
+  const t = ENEMY_TYPES[type];
+  const pad = 60;
+  let x, y;
+  switch (Math.floor(Math.random() * 4)) {
+    case 0: x = Math.random() * W; y = -pad; break;
+    case 1: x = Math.random() * W; y = H + pad; break;
+    case 2: x = -pad; y = Math.random() * H; break;
+    default: x = W + pad; y = Math.random() * H;
+  }
+  const hpMul = 1 + (game.wave - 1) * 0.15;
+  enemies.push({
+    type, x, y, r: t.r,
+    hp: Math.ceil(t.hp * hpMul), maxHp: Math.ceil(t.hp * hpMul),
+    speed: rand(t.speed[0], t.speed[1]) + game.wave * 3,
+    score: t.score, color: t.color, dmg: t.dmg,
+    angle: 0, shootTimer: rand(1, 2.5), hitFlash: 0, marked: false
+  });
+}
+
+function explode(x, y, radius, damage, friendly) {
+  burst(x, y, '#fb923c', 30, 320);
+  ring(x, y, '#fbbf24', radius * 1.3, 5);
+  game.shake = Math.min(game.shake + 10, 18);
+  if (friendly) {
+    for (const e of enemies) {
+      const d = Math.hypot(e.x - x, e.y - y);
+      if (d < radius + e.r) damageEnemy(e, damage * (1 - 0.5 * d / radius), e.x, e.y);
+    }
+  } else {
+    const pd = Math.hypot(player.x - x, player.y - y);
+    if (pd < radius + player.r) hurtPlayer(14); // آسیب ناحیه‌ای انفجار دشمن
+  }
+}
+
+function damageEnemy(e, dmg, hx, hy) {
+  if (e.marked) return;
+  e.hp -= dmg;
+  e.hitFlash = 0.12;
+  burst(hx || e.x, hy || e.y, e.color, 5, 160);
+  if (e.hp <= 0) {
+    e.marked = true;
+    const pts = Math.round(e.score * (1 + (game.wave - 1) * 0.1)); // wave multiplier
+    game.score += pts;
+    addFloater(e.x, e.y - e.r, '+' + pts, '#fde047');
+    burst(e.x, e.y, e.color, 18, 260);
+    ring(e.x, e.y, e.color, 46, 3);
+    game.shake = Math.min(game.shake + 3, 12);
+    if (e.type === 'bomber') explode(e.x, e.y, 90, 0, false); // انفجار هنگام مرگ
+    if (Math.random() < lifestealChance() && player.hp < player.maxHp) {
+      player.hp = Math.min(player.maxHp, player.hp + 4);
+      addFloater(player.x, player.y - 30, '+4 جان', '#4ade80');
+    }
+    onEnemyKilled();
+    syncUI();
+  }
+}
+
+function hurtPlayer(dmg) {
+  if (player.iFrames > 0 || game.isGameOver) return;
+  player.hp -= dmg;
+  player.iFrames = 0.6;
+  game.shake = Math.min(game.shake + 12, 20);
+  burst(player.x, player.y, '#ef4444', 20, 260);
+  if (player.hp <= 0) { player.hp = 0; syncUI(); gameOver(); }
+}
+
+/* ============ 9. SHOOTING ============ */
+function switchWeapon(i) {
+  if (i === weaponIdx) return;
+  const w = WEAPONS[i];
+  if (w.ammo !== Infinity && w.ammo <= 0) return;
+  weaponIdx = i;
+  weaponCooldown = Math.max(weaponCooldown, 120);
+  syncUI();
+}
+
+function tryShoot(dtMs) {
+  weaponCooldown -= dtMs;
+  if (!mouse.down || weaponCooldown > 0) return;
+  const w = WEAPONS[weaponIdx];
+  if (w.ammo !== Infinity && w.ammo <= 0) { switchWeapon(0); return; }
+  const d = player.r + 26;
+  const mx = player.x + Math.cos(player.angle) * d;
+  const my = player.y + Math.sin(player.angle) * d;
+  const spd = w.bulletSpeed * bulletSpdMul();
+  const dmg = w.damage * dmgMul();
+
+  if (w.kind === 'laser') {
+    const len = Math.max(W, H) * 1.2;
+    const ex = player.x + Math.cos(player.angle) * len;
+    const ey = player.y + Math.sin(player.angle) * len;
+    lasers.push({ x1: mx, y1: my, x2: ex, y2: ey, life: w.laserLife, color: w.color, marked: false });
+    for (const e of enemies) {
+      if (e.marked) continue;
+      const t = ((e.x - mx) * (ex - mx) + (e.y - my) * (ey - my)) / (len * len);
+      if (t > 0 && t < 1) {
+        const px = mx + (ex - mx) * t, py = my + (ey - my) * t;
+        if (Math.hypot(e.x - px, e.y - py) < e.r + 5) damageEnemy(e, dmg, px, py);
+      }
+    }
+    game.shake = Math.min(game.shake + 3, 10);
+  } else {
+    for (let i = 0; i < w.pellets; i++) {
+      const a = player.angle + (w.spread ? rand(-w.spread, w.spread) / 2 : 0);
+      bullets.push({
+        x: mx, y: my, r: w.kind === 'rocket' ? 6 : 4,
+        vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+        damage: dmg, color: w.color, kind: w.kind,
+        blastRadius: w.blastRadius, blastDamage: w.blastDamage * dmgMul(),
+        marked: false, hitSet: null, trail: []
+      });
+    }
+    burst(mx, my, w.color, weaponIdx === 1 ? 8 : 3, 180); // muzzle flash
+    game.shake = Math.min(game.shake + (weaponIdx === 3 ? 6 : 1.5), 14);
+  }
+
+  if (w.ammo !== Infinity) w.ammo--;
+  let cd = w.cooldown;
+  if (w.kind === 'laser' || w.kind === 'rocket') cd *= cdMul();
+  else cd *= Math.pow(0.88, game.upgrades.fireRate);
+  weaponCooldown = cd;
+  syncUI();
+}
+
+/* ============ 10. UPDATE ============ */
+function update(dt, dtMs) {
+  /* --- player movement --- */
+  let dx = 0, dy = 0;
+  if (keys['KeyW']) dy -= 1;
+  if (keys['KeyS']) dy += 1;
+  if (keys['KeyA']) dx -= 1;
+  if (keys['KeyD']) dx += 1;
+  const len = Math.hypot(dx, dy);
+  if (len > 0) {
+    player.x += dx / len * playerSpeed() * dt;
+    player.y += dy / len * playerSpeed() * dt;
+  }
+  player.x = clamp(player.x, player.r, W - player.r);
+  player.y = clamp(player.y, player.r, H - player.r);
+  player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  if (player.iFrames > 0) player.iFrames -= dt;
+
+  tryShoot(dtMs);
+
+  /* --- wave spawn --- */
+  if (!game.betweenWaves && game.toSpawn > 0) {
+    game.spawnTimer += dtMs;
+    const interval = Math.max(240, 900 - game.wave * 55);
+    if (game.spawnTimer >= interval) {
+      game.spawnTimer = 0;
+      spawnEnemy(game.spawnQueue[game.waveTotal - game.toSpawn]);
+      game.toSpawn--;
+    }
+  } else if (game.betweenWaves && !game.upgrading) {
+    game.betweenTimer -= dt;
+    if (game.betweenTimer <= 0) offerUpgrades();
+  }
+
+  /* --- bullets --- */
+  for (const b of bullets) {
+    if (b.marked) continue;
+    b.trail.push({ x: b.x, y: b.y });
+    if (b.trail.length > 8) b.trail.shift();
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const p = 60;
+    if (b.x < -p || b.x > W + p || b.y < -p || b.y > H + p) { b.marked = true; continue; }
+    for (const e of enemies) {
+      if (e.marked) continue;
+      const ddx = b.x - e.x, ddy = b.y - e.y, rr = b.r + e.r;
+      if (ddx * ddx + ddy * ddy < rr * rr) {
+        if (b.kind === 'rocket') {
+          b.marked = true;
+          explode(b.x, b.y, b.blastRadius, b.blastDamage, true);
+          break; // یک برخورد در هر فریم
+        } else {
+          b.marked = true; // جلوگیری از چند برخورد یک گلوله
+          damageEnemy(e, b.damage, b.x, b.y);
+          break;
+        }
+      }
+    }
+  }
+
+  /* --- enemies --- */
+  for (const e of enemies) {
+    if (e.marked) continue;
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+    const ddx = player.x - e.x, ddy = player.y - e.y;
+    const d = Math.hypot(ddx, ddy) || 1;
+    const a = Math.atan2(ddy, ddx);
+    e.angle = a;
+
+    if (e.type === 'shooter') {
+      if (d > 320)      { e.x += Math.cos(a) * e.speed * dt; e.y += Math.sin(a) * e.speed * dt; }
+      else if (d < 220) { e.x -= Math.cos(a) * e.speed * 0.6 * dt; e.y -= Math.sin(a) * e.speed * 0.6 * dt; }
+      e.shootTimer -= dt;
+      if (e.shootTimer <= 0 && d < 700) {
+        e.shootTimer = rand(1.4, 2.4);
+        const s = 320;
+        enemyBullets.push({ x: e.x, y: e.y, r: 5, vx: Math.cos(a) * s, vy: Math.sin(a) * s, dmg: 8, marked: false });
+      }
+    } else {
+      e.x += Math.cos(a) * e.speed * dt;
+      e.y += Math.sin(a) * e.speed * dt;
+      if (e.type === 'bomber' && d < e.r + player.r + 8) {
+        e.marked = true;
+        explode(e.x, e.y, 95, 0, false);
+        onEnemyKilled();
+        syncUI();
+        continue;
+      }
+    }
+
+    // برخورد دشمن با بازیکن
+    if (d < e.r + player.r) {
+      if (e.type === 'bomber') {
+        e.marked = true; explode(e.x, e.y, 95, 0, false); onEnemyKilled();
+      } else {
+        hurtPlayer(e.dmg);
+        if (e.type !== 'tank') { e.marked = true; onEnemyKilled(); }
+        else { e.hp -= 1; if (e.hp <= 0) damageEnemy(e, 0); }
+      }
+      syncUI();
+    }
+  }
+
+  /* --- enemy bullets --- */
+  for (const b of enemyBullets) {
+    if (b.marked) continue;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const p = 40;
+    if (b.x < -p || b.x > W + p || b.y < -p || b.y > H + p) { b.marked = true; continue; }
+    const ddx = b.x - player.x, ddy = b.y - player.y, rr = b.r + player.r;
+    if (ddx * ddx + ddy * ddy < rr * rr) {
+      b.marked = true;
+      hurtPlayer(b.dmg);
+    }
+  }
+
+  /* --- effects --- */
+  for (const pa of particles) {
+    pa.x += pa.vx * dt; pa.y += pa.vy * dt;
+    pa.vx *= 0.94; pa.vy *= 0.94;
+    pa.life -= pa.decay * dt;
+    if (pa.life <= 0) pa.marked = true;
+  }
+  for (const r of rings) {
+    r.r += (r.maxR - r.r) * 8 * dt;
+    r.life -= dt * 2.5;
+    if (r.life <= 0) r.marked = true;
+  }
+  for (const f of floaters) {
+    f.y -= 45 * dt; f.life -= dt * 1.2;
+    if (f.life <= 0) f.marked = true;
+  }
+  for (const l of lasers) {
+    l.life -= dt;
+    if (l.life <= 0) l.marked = true;
+  }
+
+  /* --- cleanup --- */
+  bullets      = bullets.filter(o => !o.marked);
+  enemies      = enemies.filter(o => !o.marked);
+  particles    = particles.filter(o => !o.marked);
+  rings        = rings.filter(o => !o.marked);
+  floaters     = floaters.filter(o => !o.marked);
+  enemyBullets = enemyBullets.filter(o => !o.marked);
+  lasers       = lasers.filter(o => !o.marked);
+  if (particles.length > 500) particles.splice(0, particles.length - 500);
+
+  if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 40);
+  syncUI();
+}
+
+/* ============ 11. RENDER ============ */
+const stars = [];
+for (let i = 0; i < 90; i++) {
+  stars.push({ x: Math.random(), y: Math.random(), s: rand(0.5, 2), tw: Math.random() * TAU });
+}
+
+function drawBackground(t) {
+  ctx.fillStyle = '#0b0e14';
+  ctx.fillRect(0, 0, W, H);
+  // grid
+  ctx.strokeStyle = 'rgba(56,189,248,0.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x < W; x += 70) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 0; y < H; y += 70) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  // stars
+  for (const s of stars) {
+    ctx.globalAlpha = 0.35 + 0.35 * Math.sin(t * 0.002 + s.tw);
+    ctx.fillStyle = '#94a3b8';
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * H, s.s, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // vignette
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function render(t) {
+  drawBackground(t);
+  ctx.save();
+  if (game.shake > 0) {
+    ctx.translate((Math.random() - 0.5) * game.shake, (Math.random() - 0.5) * game.shake);
+  }
+
+  // particles
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(p.life, 0);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // rings (shockwave)
+  for (const r of rings) {
+    ctx.globalAlpha = Math.max(r.life, 0) * 0.8;
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = r.width * r.life;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.r, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // lasers (با glow)
+  for (const l of lasers) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(l.life / 0.09, 0);
+    ctx.strokeStyle = l.color;
+    ctx.shadowColor = l.color;
+    ctx.shadowBlur = 24;
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // bullets (با trail)
+  for (const b of bullets) {
+    if (b.trail && b.trail.length > 1) {
+      ctx.strokeStyle = b.color;
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = b.r;
+      ctx.beginPath();
+      ctx.moveTo(b.trail[0].x, b.trail[0].y);
+      for (const pt of b.trail) ctx.lineTo(pt.x, pt.y);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = b.color;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+    if (b.kind === 'rocket') {
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.45, 0, TAU); ctx.fill();
+    }
+  }
+
+  // enemy bullets
+  for (const b of enemyBullets) {
+    ctx.fillStyle = '#f472b6';
+    ctx.shadowColor = '#ec4899';
+    ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // enemies
+  for (const e of enemies) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.rotate(e.angle || 0);
+    ctx.beginPath();
+    if (e.type === 'tank') {
+      ctx.rect(-e.r * 0.8, -e.r * 0.8, e.r * 1.6, e.r * 1.6);
+    } else if (e.type === 'bomber') {
+      ctx.arc(0, 0, e.r, 0, TAU);
+    } else {
+      ctx.moveTo(e.r, 0);
+      ctx.lineTo(-e.r * 0.8, -e.r * 0.75);
+      ctx.lineTo(-e.r * 0.4, 0);
+      ctx.lineTo(-e.r * 0.8, e.r * 0.75);
+      ctx.closePath();
+    }
+    ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : e.color;
+    ctx.shadowColor = e.color;
+    ctx.shadowBlur = 14;
+    ctx.fill();
+    ctx.restore();
+    ctx.shadowBlur = 0;
+    // نوار HP اگر آسیب دیده
+    if (e.hp < e.maxHp) {
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(e.x - e.r, e.y - e.r - 9, e.r * 2, 4);
+      ctx.fillStyle = '#4ade80';
+      ctx.fillRect(e.x - e.r, e.y - e.r - 9, e.r * 2 * Math.max(e.hp / e.maxHp, 0), 4);
+    }
+  }
+
+  // player
+  if (!game.isGameOver) {
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(player.r - 4, -4.5, 26, 9);
+    ctx.restore();
+    const blink = player.iFrames > 0 && (performance.now() / 60 | 0) % 2 === 0;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r, 0, TAU);
+    ctx.fillStyle = blink ? '#fca5a5' : '#e2e8f0';
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // نشانگر سلاح فعال
+    ctx.fillStyle = WEAPONS[weaponIdx].color;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, 5, 0, TAU);
+    ctx.fill();
+  }
+
+  // floating score texts
+  ctx.textAlign = 'center';
+  for (const f of floaters) {
+    ctx.globalAlpha = Math.max(f.life, 0);
+    ctx.fillStyle = f.color;
+    ctx.font = 'bold 16px Tahoma, sans-serif';
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+/* ============ 12. MAIN LOOP ============ */
+let lastTime = 0;
+
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+  if (!lastTime) lastTime = timestamp; // شروع درست lastTime
+  let dtMs = timestamp - lastTime;
+  lastTime = timestamp;
+  if (!isFinite(dtMs) || dtMs <= 0) return;
+  dtMs = Math.min(dtMs, 50);
+  const dt = dtMs / 1000;
+
+  if (game.isGameOver || game.paused || game.upgrading) {
+    render(timestamp); // فقط رندر، بدون آپدیت گیم‌پلی
+    return;
+  }
+  update(dt, dtMs);
+  render(timestamp);
+}
+
+resetGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
