@@ -1,4 +1,4 @@
-# 🚀 2D Arena Shoote
+# 🚀 2D Arena 
 
 A fast-paced, top-down 2D Arena Shooter built strictly with **Vanilla JavaScript** and the **HTML5 Canvas API**—zero external dependencies or runtime libraries.
 
