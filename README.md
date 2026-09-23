@@ -1,9 +1,6 @@
 # 🚀 2D Arena Shooter
-
 A fast-paced, top-down 2D Arena Shooter built strictly with **Vanilla JavaScript** and the **HTML5 Canvas API**—zero external dependencies or runtime libraries.
-
 ---
-
 ## 🎮 Core Features & Mechanics
 
 - **Delta-Time Driven Game Loop:** Decoupled physics update and rendering cycles utilizing `requestAnimationFrame`, ensuring consistent behavior regardless of monitor refresh rates.
