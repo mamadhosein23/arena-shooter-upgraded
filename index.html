@@ -28,7 +28,7 @@
       user-select: none;
       -webkit-user-select: none;
     }
-    canvas { display: block; width: 100%; height: 100%; }
+    canvas { display: block; width: 100vw; height: 100vh; }
     .hud {
       position: fixed;
       inset-block-start: 16px;
@@ -67,13 +67,14 @@
       overflow: hidden;
       margin-top: 4px;
       position: relative;
+      direction: ltr; /* جلوگیری از پرش ترانسفورم در جهت RTL */
     }
     .bar > i {
       display: block;
       height: 100%;
       width: 100%;
       background: linear-gradient(90deg, var(--cyan), var(--cyan2));
-      transform-origin: inline-start center;
+      transform-origin: left center;
       will-change: transform;
     }
     .bar.dash > i { background: linear-gradient(90deg, #38bdf8, #a78bfa); }
@@ -105,6 +106,7 @@
       flex-wrap: wrap;
       margin-bottom: 16px;
       font-size: 12px;
+      direction: ltr;
     }
     .kbd span {
       border: 1px solid rgba(255, 255, 255, 0.15);
@@ -210,8 +212,9 @@ class SoundEngine {
 const audio = new SoundEngine();
 
 const canvas = $('gameCanvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false });
 let viewW = 0, viewH = 0, dpr = 1;
+let rect = canvas.getBoundingClientRect();
 
 function resize(){
   dpr = window.devicePixelRatio || 1;
@@ -219,8 +222,7 @@ function resize(){
   viewH = window.innerHeight;
   canvas.width = Math.floor(viewW * dpr);
   canvas.height = Math.floor(viewH * dpr);
-  canvas.style.width = viewW + 'px';
-  canvas.style.height = viewH + 'px';
+  rect = canvas.getBoundingClientRect();
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 window.addEventListener('resize', resize);
@@ -293,14 +295,16 @@ function isPathAvailable(sc, sr, tc, tr){
   const visited = new Uint8Array(COLS * ROWS);
   visited[sr * COLS + sc] = 1;
   const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  while(q.length){
-    const [c, r] = q.shift();
+  let head = 0;
+  while(head < q.length){
+    const [c, r] = q[head++];
     if(c === tc && r === tr) return true;
     for(const [dc, dr] of dirs){
       const nc = c+dc, nr = r+dr;
       if(nc<0 || nc>=COLS || nr<0 || nr>=ROWS) continue;
-      if(!visited[nr*COLS + nc] && grid[nr][nc] === 0){
-        visited[nr*COLS + nc] = 1;
+      const idx = nr*COLS + nc;
+      if(!visited[idx] && grid[nr][nc] === 0){
+        visited[idx] = 1;
         q.push([nc, nr]);
       }
     }
@@ -315,10 +319,13 @@ function findPathAStar(sc, sr, tc, tr){
   const closed = new Uint8Array(COLS * ROWS);
   gScores[sr*COLS + sc] = 0;
   let steps = 0;
-  while(open.length && steps++ < 800){
+  while(open.length && steps++ < 400){
     let bi = 0;
     for(let i=1; i<open.length; i++) if(open[i].f < open[bi].f) bi = i;
-    const curr = open.splice(bi, 1)[0];
+    const curr = open[bi];
+    open[bi] = open[open.length - 1];
+    open.pop();
+
     if(curr.c === tc && curr.r === tr){
       const res = [];
       let n = curr;
@@ -330,8 +337,9 @@ function findPathAStar(sc, sr, tc, tr){
       const nc = curr.c + dc, nr = curr.r + dr;
       if(nc<0||nc>=COLS||nr<0||nr>=ROWS||grid[nr][nc]===1||closed[nr*COLS + nc]) continue;
       const tentG = curr.g + 1;
-      if(tentG < gScores[nr*COLS + nc]){
-        gScores[nr*COLS + nc] = tentG;
+      const idx = nr*COLS + nc;
+      if(tentG < gScores[idx]){
+        gScores[idx] = tentG;
         const h = Math.abs(nc - tc) + Math.abs(nr - tr);
         open.push({c:nc, r:nr, g:tentG, f:tentG + h, p:curr});
       }
@@ -445,7 +453,7 @@ function handleShooting(now){
 
 function fixedUpdate(dt){
   const now = performance.now();
-  player.angle = Math.atan2((mouse.y + Math.floor(camera.y)) - player.y, (mouse.x + Math.floor(camera.x)) - player.x);
+  player.angle = Math.atan2((mouse.y + camera.y) - player.y, (mouse.x + camera.x) - player.x);
 
   if(player.isDashing && now > player.dashUntil) player.isDashing = false;
 
@@ -582,7 +590,8 @@ function triggerGameOver(){
 }
 
 function draw(){
-  ctx.clearRect(0, 0, viewW, viewH);
+  ctx.fillStyle = '#02040a';
+  ctx.fillRect(0, 0, viewW, viewH);
   ctx.save();
   const camX = Math.floor(camera.x);
   const camY = Math.floor(camera.y);
@@ -717,7 +726,10 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
-window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+window.addEventListener('mousemove', (e) => { 
+  mouse.x = e.clientX - rect.left; 
+  mouse.y = e.clientY - rect.top; 
+});
 window.addEventListener('mousedown', (e) => { if(e.button === 0) mouse.isDown = true; });
 window.addEventListener('mouseup', (e) => { if(e.button === 0) mouse.isDown = false; });
 window.addEventListener('blur', () => { 
