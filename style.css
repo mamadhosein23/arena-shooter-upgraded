@@ -10,23 +10,35 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html, body {
-  height: 100dvh;
+html,
+body {
   width: 100%;
+  height: 100%;
+  min-height: 100%;
   margin: 0;
   overflow: hidden;
   background: var(--bg);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   user-select: none;
   -webkit-user-select: none;
 }
 
-canvas {
+body {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Canvas با اندازهٔ منطقی viewport هماهنگ است؛ رزولوشن داخلی را JavaScript تنظیم می‌کند. */
+#gameCanvas {
+  position: fixed;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -38,57 +50,59 @@ canvas {
   inset-block-start: 16px;
   inset-inline: 16px;
   display: flex;
+  align-items: flex-start;
   gap: 12px;
   pointer-events: none;
   z-index: 10;
 }
 
 .panel {
-  background: var(--panel);
+  min-width: 200px;
+  padding: 12px 16px;
   border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: 12px;
-  padding: 12px 16px;
-  min-width: 200px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
 }
 
 .panel h3 {
   margin: 0 0 8px;
+  color: var(--muted);
   font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 700;
 }
 
 .row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   font-size: 13px;
 }
 
-/* بهینه‌سازی نوار پیشرفت برای موتور رندر */
+/* Progress bars */
 .bar {
+  position: relative;
   height: 8px;
+  margin-top: 6px;
+  overflow: hidden;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  margin-top: 6px;
-  position: relative;
-  direction: ltr; /* اصلاح جهت رندر مستقل از جهت صفحه */
+  direction: ltr;
 }
 
 .bar > i {
   display: block;
-  height: 100%;
   width: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--cyan-glow));
+  height: 100%;
+  transform: scaleX(1);
   transform-origin: left center;
-  will-change: transform; /* حذف transition برای هماهنگی با حلقه بازی */
+  background: linear-gradient(90deg, var(--cyan), var(--cyan-glow));
+  will-change: transform;
 }
 
 .bar.dash > i {
@@ -103,12 +117,15 @@ canvas {
   color: var(--muted);
 }
 
-/* Overlay & Modals */
+/* Overlay */
 #overlay-screen {
   position: fixed;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
   background: rgba(2, 4, 10, 0.85);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -116,19 +133,21 @@ canvas {
 }
 
 .overlay-card {
-  width: min(500px, calc(100vw - 32px));
-  border-radius: 16px;
-  border: 1px solid var(--panel-border);
-  background: #071126;
+  width: min(500px, 100%);
+  max-height: 100%;
   padding: 24px;
-  text-align: center;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  background: #071126;
   box-shadow: 0 0 40px rgba(0, 255, 204, 0.1);
+  text-align: center;
 }
 
 .title {
   margin: 0 0 8px;
-  font-size: 22px;
   color: var(--cyan);
+  font-size: 22px;
   text-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
 }
 
@@ -141,39 +160,42 @@ canvas {
 
 .kbd {
   display: flex;
-  gap: 8px;
-  justify-content: center;
   flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
   margin-bottom: 16px;
   font-size: 12px;
   direction: ltr;
 }
 
 .kbd span {
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
   padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
   font-family: var(--font-mono);
 }
 
-/* Button UI */
+/* Buttons */
 button {
-  font-family: inherit;
+  padding: 10px 20px;
   border: 1px solid var(--cyan);
+  border-radius: 8px;
   background: rgba(0, 255, 204, 0.12);
   color: var(--text);
-  padding: 10px 20px;
-  border-radius: 8px;
-  cursor: pointer;
+  font: inherit;
   font-weight: 700;
+  cursor: pointer;
   pointer-events: auto;
-  transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    transform 0.1s ease,
+    border-color 0.2s ease;
 }
 
 button:hover {
-  background: rgba(0, 255, 204, 0.25);
   border-color: #fff;
+  background: rgba(0, 255, 204, 0.25);
 }
 
 button:active {
@@ -193,19 +215,64 @@ button:focus-visible {
 }
 
 .upgrade-btn {
-  width: 100%;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
   padding: 12px 16px;
+  text-align: right;
 }
 
-/* Accessibility */
+/* نمایشگرهای باریک */
+@media (max-width: 600px) {
+  .hud {
+    inset-block-start: 8px;
+    inset-inline: 8px;
+    gap: 8px;
+  }
+
+  .panel {
+    min-width: 0;
+    padding: 9px 10px;
+  }
+
+  .panel h3 {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+
+  .row {
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .overlay-card {
+    padding: 20px 16px;
+  }
+
+  .title {
+    font-size: 19px;
+  }
+}
+
+@media (max-width: 360px) {
+  .hud {
+    flex-direction: column;
+  }
+
+  .panel {
+    width: max-content;
+  }
+}
+
+/* دسترس‌پذیری */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
 }
