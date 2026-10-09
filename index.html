@@ -1,20 +1,12 @@
 /**
- * ماژول مدیریت فیزیک حرکت و مسیریابی بهینه
- */
-
-/**
- * جابه‌جایی موجودیت با قابلیت Continuous Collision Detection (CCD) و سُر خوردن روی دیوار
- * @param {Object} entity - موجودیت دارای مختصات x و y
- * @param {number} dx - بردار جابه‌جایی افقی
- * @param {number} dy - بردار جابه‌جایی عمودی
- * @param {number} radius - شعاع هیت‌باکس موجودیت
- * @param {Function} wallCollide - تابع اعتبارسنجی برخورد: (x, y, radius) => boolean
+ * Entity movement module with Continuous Collision Detection (CCD)
+ * and sliding mechanics to prevent tunneling.
  */
 function moveEntity(entity, dx, dy, radius, wallCollide) {
     const distance = Math.hypot(dx, dy);
     if (distance === 0) return;
 
-    // گام‌های پویا بر اساس شعاع برای حذف کامل Tunneling در سرعت‌های بالا
+    // Calculate dynamic steps based on radius to eliminate tunneling at high speeds
     const maxStepSize = Math.max(radius * 0.5, 1);
     const steps = Math.ceil(distance / maxStepSize);
 
@@ -22,11 +14,11 @@ function moveEntity(entity, dx, dy, radius, wallCollide) {
     const stepY = dy / steps;
 
     for (let i = 0; i < steps; i++) {
-        // محور X با امکان حرکت در امتداد دیوار (Wall Sliding)
+        // Horizontal movement with wall sliding
         if (!wallCollide(entity.x + stepX, entity.y, radius)) {
             entity.x += stepX;
         }
-        // محور Y
+        // Vertical movement
         if (!wallCollide(entity.x, entity.y + stepY, radius)) {
             entity.y += stepY;
         }
@@ -34,8 +26,8 @@ function moveEntity(entity, dx, dy, radius, wallCollide) {
 }
 
 /**
- * زمان‌بند اجرای الگوریتم A* (Time-slicing Pathfinding Queue)
- * جلوگیری از افت فریم ناشی از اجرای سنگین مسیر‌یابی در یک فریم
+ * Time-sliced A* scheduler.
+ * Limits CPU usage by distributing pathfinding requests over multiple frames.
  */
 class PathfindingScheduler {
     constructor(maxPathsPerFrame = 5) {
@@ -44,27 +36,24 @@ class PathfindingScheduler {
     }
 
     /**
-     * ثبت درخواست محاسبه مسیر
-     * @param {Object} enemy - موجودیت دشمن
-     * @param {Object} target - هدف (پلیر)
-     * @param {Function} findPathCallback - متد فراخوانی A*
+     * Add a pathfinding request to the queue.
      */
     requestPath(enemy, target, findPathCallback) {
-        // جلوگیری از ثبت درخواست تکراری برای یک موجودیت
+        // Prevent duplicate requests for the same enemy
         if (!this.queue.some(req => req.enemy === enemy)) {
             this.queue.push({ enemy, target, findPathCallback });
         }
     }
 
     /**
-     * اجرا در حلقه FixedUpdate بازی
+     * Processes pending requests in the game loop.
      */
     update() {
         let processed = 0;
         while (this.queue.length > 0 && processed < this.maxPathsPerFrame) {
             const { enemy, target, findPathCallback } = this.queue.shift();
             
-            // شرط بازبینی: فقط در صورت عدم دید مستقیم (Raycast) یا تغییر موقعیت معنادار
+            // Only update path if necessary (e.g., target moved, LOS broken)
             enemy.path = findPathCallback(enemy, target);
             processed++;
         }
@@ -72,13 +61,13 @@ class PathfindingScheduler {
 }
 
 // ==========================================
-// نحوه استفاده در چرخه بازی (FixedUpdate Loop)
+// Usage Example (FixedUpdate)
 // ==========================================
 
 const pathScheduler = new PathfindingScheduler(5);
 
 function fixedUpdate(delta) {
-    // 1. حرکت روان پلیر با بردار نرمال‌شده
+    // 1. Move player with normalized vector
     const d = Math.hypot(mx, my);
     if (d > 0) {
         const vx = (mx / d) * spd;
@@ -86,6 +75,6 @@ function fixedUpdate(delta) {
         moveEntity(player, vx, vy, player.radius, wallCollide);
     }
 
-    // 2. پردازش صف محاسبات سنگین A*
+    // 2. Process pathfinding queue
     pathScheduler.update();
 }
