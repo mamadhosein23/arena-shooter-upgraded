@@ -1,6 +1,13 @@
 # 🚀 2D Arena Shooter
-A fast-paced, top-down 2D Arena Shooter built strictly with **Vanilla JavaScript** and the **HTML5 Canvas API**—zero external dependencies or runtime libraries.
+
+[![JavaScript](https://img.shields.io/badge/Language-Vanilla%20JS-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![HTML5 Canvas](https://img.shields.io/badge/Graphics-Canvas%20API-E34F26?style=flat-square&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+
+A fast-paced, top-down 2D Arena Shooter built strictly with **Vanilla JavaScript** and the **HTML5 Canvas API**—zero external dependencies, build tools, or runtime libraries.
+
 ---
+
 ## 🎮 Core Features & Mechanics
 
 - **Delta-Time Driven Game Loop:** Decoupled physics update and rendering cycles utilizing `requestAnimationFrame`, ensuring consistent behavior regardless of monitor refresh rates.
@@ -37,12 +44,12 @@ A fast-paced, top-down 2D Arena Shooter built strictly with **Vanilla JavaScript
 
 ## 🛠 Technical Architecture
 
-The single-file architecture (`index.html`) is structured into distinct modules:
+The engine is built around a decoupled architecture focused on performance:
 
-1. **Setup & Viewport Management:** Dynamic canvas resizing and resolution scaling.
+1. **Setup & Viewport Management:** Dynamic canvas resizing, DPI scaling, and coordinate normalization.
 2. **Input State Manager:** Discrete tracking of active keymaps and continuous mouse coordinate polling.
 3. **Collision Detection Math:**
-   - *Circle-to-Circle Collision:* Distance vector calculations using squared Euclidean norms.
+   - *Circle-to-Circle Collision:* Distance vector calculations using squared Euclidean norms to eliminate costly square root calls.
    - *Raycast/Segment Collision:* Point-to-line segment projection for instant laser hits.
 4. **Entity Lifecycle & Memory Cleanup:** Array compaction and memory garbage mitigation for particles, lasers, floaters, and expired bullet entities.
 
@@ -52,5 +59,8 @@ The single-file architecture (`index.html`) is structured into distinct modules:
 
 No build tools, bundlers, or package managers required.
 
-1. Clone or download the repository.
-2. Open `index.html` directly in any modern web browser (or serve it via the **Live Server** extension in VS Code).
+1. **Clone the repository:**
+```bash
+   git clone https://github.com/mamadhosein23/arena-shooter-upgraded.git
+   cd arena-shooter-upgraded
+   
