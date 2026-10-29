@@ -1,178 +1,61 @@
 /**
- * Advanced Physics & Spatial Response Module
+ * Move & Slide with TRUE CCD (time-of-impact) using swept circle casts.
+ *
+ * Required collision API:
+ *   castCircle(x, y, r, dx, dy) -> null | { t, nx, ny }
+ * Where:
+ *   t in [0..1] is time of first impact along (dx, dy)
+ *   (nx, ny) is collision normal (unit length)
  */
-class PhysicsEngine {
-    /**
-     * Resolves continuous movement against environment using iterative swept projections.
-     * Prevents corner-locking, tunneling, and handles non-axis-aligned boundary slides.
-     * 
-     * @param {Object} entity - { x, y }
-     * @param {number} vx - Raw horizontal velocity integrated over delta
-     * @param {number} vy - Raw vertical velocity integrated over delta
-     * @param {number} radius - Bounding circle radius
-     * @param {Function} queryCollision - Ret: null | { normalX, normalY, penetration }
-     */
-    static moveAndSlide(entity, vx, vy, radius, queryCollision, maxBounces = 3) {
-        let remainingVx = vx;
-        let remainingVy = vy;
-        let remainingDistance = Math.hypot(remainingVx, remainingVy);
-        
-        if (remainingDistance < 1e-6) return;
+function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
+  const maxIters = opts.maxIters ?? 4;      // max number of collisions per tick
+  const skin = opts.skin ?? 0.01;           // small margin to avoid jitter
+  const minMove = opts.minMove ?? 1e-6;
 
-        // Substep resolution to enforce continuous constraints
-        const maxStep = Math.max(radius * 0.4, 0.5);
-        let steps = Math.ceil(remainingDistance / maxStep);
-        let stepVx = remainingVx / steps;
-        let stepVy = remainingVy / steps;
+  let vx = dx, vy = dy;
 
-        for (let s = 0; s < steps; s++) {
-            let iteration = 0;
-            
-            while (iteration++ < maxBounces) {
-                const targetX = entity.x + stepVx;
-                const targetY = entity.y + stepVy;
-                
-                // Query collision normal and penetration depth at projected target
-                const hit = queryCollision(targetX, targetY, radius);
+  for (let iter = 0; iter < maxIters; iter++) {
+    const dist = Math.hypot(vx, vy);
+    if (dist < minMove) break;
 
-                if (!hit) {
-                    entity.x = targetX;
-                    entity.y = targetY;
-                    break; // Unobstructed movement
-                }
+    // Cast circle along remaining movement
+    const hit = castCircle(entity.x, entity.y, radius, vx, vy);
 
-                // 1. Position Correction (Depenetration along contact normal)
-                entity.x += hit.normalX * hit.penetration;
-                entity.y += hit.normalY * hit.penetration;
-
-                // 2. Vector Projection: Project remaining velocity along collision plane tangent
-                // v_projected = v - (v . n) * n
-                const dot = stepVx * hit.normalX + stepVy * hit.normalY;
-                
-                // Only slide if moving into the collision surface
-                if (dot < 0) {
-                    stepVx -= dot * hit.normalX;
-                    stepVy -= dot * hit.normalY;
-                } else {
-                    break;
-                }
-            }
-        }
-    }
-}
-
-/**
- * High-performance, Zero-Alloc Ring Buffer Priority Scheduler for Game AI.
- * Employs adaptive time-budgeting via performance.now().
- */
-class BudgetedPathScheduler {
-    /**
-     * @param {number} capacity - Fixed pre-allocated slot count
-     * @param {number} maxFrameBudgetMs - Maximum computation time per frame (ms)
-     */
-    constructor(capacity = 256, maxFrameBudgetMs = 1.5) {
-        this.capacity = capacity;
-        this.maxFrameBudgetMs = maxFrameBudgetMs;
-        
-        // Flat typed arrays / pre-allocated arrays (Zero dynamic memory allocations during runtime)
-        this.queue = new Array(capacity);
-        this.head = 0;
-        this.tail = 0;
-        this.size = 0;
-        this.trackedEnemies = new Set();
+    // No collision: apply full movement
+    if (!hit) {
+      entity.x += vx;
+      entity.y += vy;
+      break;
     }
 
-    /**
-     * Enqueue a job with a calculated spatial priority (e.g. 1 / Distance to Player).
-     */
-    request(enemy, target, priority, findPathCallback) {
-        if (this.trackedEnemies.has(enemy) || this.size >= this.capacity) {
-            return false;
-        }
+    // Move up to just before contact (leave skin margin)
+    const t = Math.max(0, Math.min(1, hit.t));
+    const travel = Math.max(0, t * dist - skin);
+    const tx = (vx / dist) * travel;
+    const ty = (vy / dist) * travel;
 
-        const job = { enemy, target, priority, findPathCallback };
-        this.trackedEnemies.add(enemy);
+    entity.x += tx;
+    entity.y += ty;
 
-        this.queue[this.tail] = job;
-        this.tail = (this.tail + 1) % this.capacity;
-        this.size++;
+    // Compute remaining motion after contact
+    // remaining = original - traveled
+    let rx = vx - tx;
+    let ry = vy - ty;
 
-        return true;
+    // Slide: remove the component into the normal
+    const nx = hit.nx, ny = hit.ny;
+    const into = rx * nx + ry * ny;
+
+    // If moving into surface, project out that component
+    if (into < 0) {
+      rx = rx - into * nx;
+      ry = ry - into * ny;
+    } else {
+      // Already moving away: stop to avoid numerical issues
+      rx = 0; ry = 0;
     }
 
-    /**
-     * Executes pathfinding calculations until the allotted time budget expires.
-     */
-    flush() {
-        if (this.size === 0) return;
-
-        const startTime = performance.now();
-
-        // Sort current window by priority (highest priority executed first)
-        // Mini insertion-sort or selective iteration for budgeted execution
-        while (this.size > 0) {
-            // Check frame budget
-            if (performance.now() - startTime >= this.maxFrameBudgetMs) {
-                break; // Preserve remaining jobs for next frame to guarantee 60/120+ FPS
-            }
-
-            const job = this.queue[this.head];
-            this.queue[this.head] = null; // GC dereference
-            this.head = (this.head + 1) % this.capacity;
-            this.size--;
-            this.trackedEnemies.delete(job.enemy);
-
-            // Skip dead/deactivated agents
-            if (job.enemy.isDestroyed || !job.enemy.active) {
-                continue;
-            }
-
-            job.enemy.path = job.findPathCallback(job.enemy, job.target);
-        }
-    }
-
-    clear() {
-        this.queue.fill(null);
-        this.head = 0;
-        this.tail = 0;
-        this.size = 0;
-        this.trackedEnemies.clear();
-    }
-}
-
-// ============================================================================
-// Real-world Integration Pipeline
-// ============================================================================
-
-const scheduler = new BudgetedPathScheduler(512, 1.5); // Max 1.5ms per tick
-
-function fixedUpdate(delta) {
-    // 1. Continuous Swept Movement with Surface Normal Sliding
-    const inputMag = Math.hypot(mx, my);
-    if (inputMag > 0) {
-        const moveDist = spd * delta;
-        const vx = (mx / inputMag) * moveDist;
-        const vy = (my / inputMag) * moveDist;
-
-        PhysicsEngine.moveAndSlide(player, vx, vy, player.radius, (x, y, r) => {
-            // Example Collision Query (Replaces simplistic binary wallCollide)
-            // Should return normal vector of collided plane/geometry:
-            // return { normalX: 0, normalY: -1, penetration: 0.1 } or null
-            return getCollisionData(x, y, r);
-        });
-    }
-
-    // 2. Schedule Enemy AI Paths based on distance to player (Closer = Higher Priority)
-    for (let i = 0; i < enemies.length; i++) {
-        const e = enemies[i];
-        if (e.needsRepath) {
-            const distSq = (player.x - e.x) ** 2 + (player.y - e.y) ** 2;
-            const priority = 1 / (Math.sqrt(distSq) + 0.001); // High priority if near
-            scheduler.request(e, player, priority, aStarSearch);
-            e.needsRepath = false;
-        }
-    }
-
-    // 3. Process pathfinding budget
-    scheduler.flush();
+    vx = rx;
+    vy = ry;
+  }
 }
