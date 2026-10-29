@@ -1,32 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,500;0,700;1,700&family=JetBrains+Mono:wght@400;700;800&display=swap');
+
 :root {
-  /* Color Palette */
-  --bg: #030712;
-  --panel-bg: rgba(6, 14, 33, 0.72);
-  --panel-border: rgba(0, 255, 204, 0.28);
-  --panel-border-active: rgba(0, 255, 204, 0.75);
+  /* Chromatic Spectrum */
+  --bg-deep: #010409;
+  --panel-surface: rgba(4, 11, 26, 0.82);
+  --panel-edge: rgba(0, 255, 204, 0.35);
   
-  --cyan: #00ffcc;
-  --cyan-glow: rgba(0, 255, 204, 0.45);
-  --cyan-dim: #008f72;
-  --dash-glow: rgba(56, 189, 248, 0.5);
-  --danger: #ff2a5f;
-  --danger-glow: rgba(255, 42, 95, 0.4);
-  
-  --text-main: #f1f5f9;
-  --text-muted: #64748b;
-  
-  /* Typography & Geometry */
-  --font-sans: "Chakra Petch", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --clip-cut: polygon(
-    0 8px,
-    8px 0,
-    calc(100% - 8px) 0,
-    100% 8px,
-    100% calc(100% - 8px),
-    calc(100% - 8px) 100%,
-    8px 100%,
-    0 calc(100% - 8px)
+  --primary-cyan: #00ffcc;
+  --cyan-dim: #028066;
+  --cyan-glow: 0 0 14px rgba(0, 255, 204, 0.65);
+  --cyan-faint: rgba(0, 255, 204, 0.08);
+
+  --dash-core: #38bdf8;
+  --dash-glow: 0 0 12px rgba(56, 189, 248, 0.6);
+
+  --danger-core: #ff0055;
+  --danger-glow: 0 0 16px rgba(255, 0, 85, 0.7);
+
+  --amber-warn: #f59e0b;
+
+  --text-pure: #ffffff;
+  --text-mid: #94a3b8;
+  --text-dark: #334155;
+
+  /* Fonts */
+  --font-main: "Chakra Petch", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* High-Tech Chamfer Cuts */
+  --cut-frame: polygon(
+    0 12px,
+    12px 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
+
+  --btn-cut: polygon(
+    0 0,
+    calc(100% - 14px) 0,
+    100% 14px,
+    100% 100%,
+    14px 100%,
+    0 calc(100% - 14px)
   );
 }
 
@@ -44,30 +63,48 @@ body {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background-color: var(--bg);
-  color: var(--text-main);
-  font-family: var(--font-sans);
+  background-color: var(--bg-deep);
+  color: var(--text-pure);
+  font-family: var(--font-main);
   user-select: none;
   -webkit-user-select: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-/* CRT Scanlines Overlay (Zero-JS Atmosphere) */
+/* ==========================================================================
+   Tactical Glass CRT & Radar Sweep Overlay
+   ========================================================================== */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 999;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.15) 0px,
-    rgba(0, 0, 0, 0.15) 1px,
-    transparent 1px,
-    transparent 2px
+  z-index: 998;
+  background: 
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+  background-size: 100% 3px, 6px 100%;
+  opacity: 0.85;
+}
+
+/* V-Sync Electron Scanline */
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 255, 204, 0.03) 50%,
+    transparent 100%
   );
-  opacity: 0.75;
+  pointer-events: none;
+  z-index: 999;
+  animation: radarSweep 6s linear infinite;
 }
 
 #gameCanvas {
@@ -80,63 +117,83 @@ body::before {
 }
 
 /* ==========================================================================
-   HUD Layout (Isolate Layer for High Framerates)
+   HUD Frame Architectures
    ========================================================================== */
 .hud {
   position: fixed;
-  inset-block-start: 20px;
-  inset-inline: 20px;
+  inset-block-start: 24px;
+  inset-inline: 24px;
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 20px;
   pointer-events: none;
-  z-index: 10;
+  z-index: 20;
   isolation: isolate;
 }
 
 .panel {
+  position: relative;
   contain: layout style;
-  min-width: 220px;
-  padding: 14px 18px;
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  clip-path: var(--clip-cut);
-  backdrop-filter: blur(14px) saturate(180%);
-  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  min-width: 240px;
+  padding: 16px 20px;
+  background: var(--panel-surface);
+  border: 1px solid var(--panel-edge);
+  clip-path: var(--cut-frame);
+  backdrop-filter: blur(16px) saturate(200%);
+  -webkit-backdrop-filter: blur(16px) saturate(200%);
   box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.6),
-    inset 0 0 12px rgba(0, 255, 204, 0.05);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    0 12px 40px rgba(0, 0, 0, 0.7),
+    inset 0 0 16px var(--cyan-faint);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease;
 }
 
-.panel:hover {
-  border-color: var(--panel-border-active);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.6),
-    0 0 14px var(--cyan-glow),
-    inset 0 0 16px rgba(0, 255, 204, 0.12);
+/* Tactical Corner Brackets (Crosshair Markers) */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--primary-cyan);
+  border-left: 2px solid var(--primary-cyan);
+  pointer-events: none;
+}
+
+.panel::after {
+  content: "LINK.ONLINE";
+  position: absolute;
+  bottom: 2px;
+  right: 14px;
+  font-family: var(--font-code);
+  font-size: 7px;
+  font-weight: 800;
+  color: var(--cyan-dim);
+  letter-spacing: 0.15em;
+  opacity: 0.6;
 }
 
 .panel h3 {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: var(--primary-cyan);
+  font-family: var(--font-code);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.panel h3::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--cyan);
-  box-shadow: 0 0 6px var(--cyan);
+.panel h3::after {
+  content: "SYS_REC";
+  padding: 2px 4px;
+  background: var(--cyan-faint);
+  border: 1px solid var(--panel-edge);
+  border-radius: 2px;
+  color: var(--text-mid);
+  font-size: 8px;
 }
 
 .row {
@@ -145,20 +202,35 @@ body::before {
   justify-content: space-between;
   gap: 12px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 /* ==========================================================================
-   Cyber Gauge Bars (Progress Bars)
+   Dynamic Gauge Systems (Segmented Tech Bars)
    ========================================================================== */
 .bar {
   position: relative;
-  height: 6px;
+  height: 8px;
   margin-top: 8px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+}
+
+/* Gridded Notch Mask on progress bar */
+.bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px,
+    transparent 8px,
+    var(--bg-deep) 8px,
+    var(--bg-deep) 10px
+  );
+  z-index: 2;
+  pointer-events: none;
 }
 
 .bar > i {
@@ -167,34 +239,37 @@ body::before {
   height: 100%;
   transform: scaleX(1);
   transform-origin: left center;
-  background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
-  box-shadow: 0 0 10px var(--cyan);
+  background: linear-gradient(90deg, var(--cyan-dim), var(--primary-cyan));
+  box-shadow: var(--cyan-glow);
   will-change: transform;
+  transition: transform 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);
 }
 
 .bar.dash > i {
-  background: linear-gradient(90deg, #0284c7, #38bdf8);
-  box-shadow: 0 0 10px var(--dash-glow);
+  background: linear-gradient(90deg, #0284c7, var(--dash-core));
+  box-shadow: var(--dash-glow);
 }
 
+/* Critical Emergency Flashing */
 .bar.danger > i {
-  background: linear-gradient(90deg, #be123c, var(--danger));
-  box-shadow: 0 0 10px var(--danger-glow);
+  background: linear-gradient(90deg, #88002a, var(--danger-core));
+  box-shadow: var(--danger-glow);
+  animation: pulseEmergency 0.8s ease-in-out infinite alternate;
 }
 
-/* Monospace Metrics Numbers */
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .muted {
-  color: var(--text-muted);
+  color: var(--text-mid);
 }
 
 /* ==========================================================================
-   Modal & Upgrade Screen
+   Overlay Modal with Tactical Framing
    ========================================================================== */
 #overlay-screen {
   position: fixed;
@@ -203,38 +278,79 @@ body::before {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: radial-gradient(circle at center, rgba(3, 7, 18, 0.8) 0%, rgba(2, 4, 10, 0.95) 100%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 50;
-  animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  background: radial-gradient(circle at center, rgba(3, 8, 20, 0.88) 0%, rgba(1, 4, 9, 0.98) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 100;
+  animation: terminalBoot 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .overlay-card {
-  width: min(520px, 100%);
-  padding: 32px;
-  background: rgba(8, 17, 38, 0.9);
-  border: 1px solid var(--panel-border-active);
-  clip-path: var(--clip-cut);
+  position: relative;
+  width: min(540px, 100%);
+  padding: 36px 32px;
+  background: rgba(6, 14, 33, 0.92);
+  border: 1px solid var(--primary-cyan);
+  clip-path: var(--cut-frame);
   box-shadow: 
-    0 0 50px rgba(0, 255, 204, 0.12),
-    inset 0 0 20px rgba(0, 255, 204, 0.05);
+    0 0 60px rgba(0, 255, 204, 0.15),
+    inset 0 0 30px rgba(0, 255, 204, 0.06);
   text-align: center;
 }
 
+/* Reticle cross marks on modal borders */
+.overlay-card::before {
+  content: "+ + + [ PROTOCOL_ACTIVE ] + + +";
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-code);
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  color: var(--cyan-dim);
+}
+
 .title {
-  margin-bottom: 8px;
-  color: var(--cyan);
-  font-size: 24px;
+  position: relative;
+  display: inline-block;
+  margin-top: 8px;
+  margin-bottom: 12px;
+  color: var(--primary-cyan);
+  font-size: 26px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  text-shadow: 0 0 12px var(--cyan-glow);
+  text-shadow: var(--cyan-glow);
+}
+
+/* RGB Split Glitch Effect on Title Hover */
+.title:hover::before,
+.title:hover::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+}
+
+.title:hover::before {
+  left: -2px;
+  text-shadow: 2px 0 var(--danger-core);
+  animation: glitchSlice 0.3s steps(2) infinite;
+}
+
+.title:hover::after {
+  left: 2px;
+  text-shadow: -2px 0 var(--dash-core);
+  animation: glitchSlice 0.3s steps(2) reverse infinite;
 }
 
 .desc {
-  margin-bottom: 20px;
-  color: #94a3b8;
+  margin-bottom: 24px;
+  color: var(--text-mid);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -243,23 +359,24 @@ body::before {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 28px;
 }
 
 .kbd span {
-  padding: 4px 10px;
-  border: 1px solid rgba(0, 255, 204, 0.2);
+  padding: 5px 12px;
+  background: rgba(0, 255, 204, 0.05);
+  border: 1px solid rgba(0, 255, 204, 0.3);
   border-radius: 2px;
-  background: rgba(0, 255, 204, 0.04);
-  color: var(--cyan);
-  font-family: var(--font-mono);
+  color: var(--primary-cyan);
+  font-family: var(--font-code);
   font-size: 11px;
-  box-shadow: inset 0 0 4px rgba(0, 255, 204, 0.1);
+  font-weight: 700;
+  box-shadow: inset 0 0 6px rgba(0, 255, 204, 0.1);
 }
 
 /* ==========================================================================
-   Cybernetic Tactile Buttons
+   Cybernetic Tactile Action Buttons
    ========================================================================== */
 button {
   all: unset;
@@ -267,80 +384,114 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 12px 24px;
-  background: rgba(0, 255, 204, 0.06);
-  border: 1px solid var(--cyan);
-  color: var(--text-main);
-  font-family: var(--font-mono);
+  padding: 14px 28px;
+  background: rgba(0, 255, 204, 0.07);
+  border: 1px solid var(--primary-cyan);
+  color: var(--text-pure);
+  font-family: var(--font-code);
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
   pointer-events: auto;
-  clip-path: polygon(0 4px, 4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%);
+  clip-path: var(--btn-cut);
   transition: background-color 0.2s, box-shadow 0.2s, transform 0.1s;
 }
 
+button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--primary-cyan);
+  box-shadow: var(--cyan-glow);
+}
+
 button:hover {
-  background: rgba(0, 255, 204, 0.2);
-  box-shadow: 0 0 16px var(--cyan-glow);
+  background: rgba(0, 255, 204, 0.24);
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
   color: #ffffff;
 }
 
 button:active {
-  transform: scale(0.97);
-  background: var(--cyan);
-  color: var(--bg);
+  transform: translateY(1px) scale(0.98);
+  background: var(--primary-cyan);
+  color: var(--bg-deep);
 }
 
 button:focus-visible {
-  outline: 2px dashed var(--cyan);
+  outline: 2px dashed var(--primary-cyan);
   outline-offset: 4px;
 }
 
 .upgrade-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   margin: 20px 0;
 }
 
 .upgrade-btn {
   width: 100%;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 16px 20px;
   text-align: left;
 }
 
-@keyframes modalFadeIn {
+/* ==========================================================================
+   Hardware Optimized Keyframe Sequences
+   ========================================================================== */
+@keyframes radarSweep {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(1000%); }
+}
+
+@keyframes pulseEmergency {
+  from { filter: brightness(1) drop-shadow(0 0 4px var(--danger-core)); }
+  to { filter: brightness(1.4) drop-shadow(0 0 16px var(--danger-core)); }
+}
+
+@keyframes terminalBoot {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.95) translateY(10px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
+@keyframes glitchSlice {
+  0% { clip-path: polygon(0 15%, 100% 15%, 100% 35%, 0 35%); }
+  50% { clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%); }
+  100% { clip-path: polygon(0 0%, 100% 0%, 100% 100%, 0 100%); }
+}
+
 /* ==========================================================================
-   Mobile & Responsive Adaptations
+   Mobile Ergonomics & Accessibility
    ========================================================================== */
 @media (max-width: 600px) {
   .hud {
     inset-block-start: 12px;
     inset-inline: 12px;
-    gap: 10px;
+    gap: 8px;
   }
 
   .panel {
     min-width: 0;
-    padding: 10px 12px;
+    padding: 10px 14px;
+  }
+
+  .panel::after {
+    display: none;
   }
 
   .overlay-card {
-    padding: 24px 18px;
+    padding: 24px 16px;
   }
 
   .title {
@@ -349,13 +500,13 @@ button:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before {
+  body::after {
     display: none;
   }
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
+    animation: none !important;
     transition-duration: 0.01ms !important;
   }
 }
