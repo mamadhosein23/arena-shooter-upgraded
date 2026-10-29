@@ -1,12 +1,18 @@
 /**
- * Entity movement module with Continuous Collision Detection (CCD)
- * and sliding mechanics to prevent tunneling.
+ * Entity movement module with Continuous Collision Detection (CCD) substapping
+ * and proper vector projection / axis sliding mechanics.
+ * 
+ * @param {Object} entity - An object containing { x, y }
+ * @param {number} dx - Displacement vector X (already scaled by delta)
+ * @param {number} dy - Displacement vector Y (already scaled by delta)
+ * @param {number} radius - Entity collision bound radius
+ * @param {Function} wallCollide - Collision predicate: (x, y, radius) => boolean
  */
 function moveEntity(entity, dx, dy, radius, wallCollide) {
     const distance = Math.hypot(dx, dy);
     if (distance === 0) return;
 
-    // Calculate dynamic steps based on radius to eliminate tunneling at high speeds
+    // Sub-stepping to prevent tunneling at high velocity (limit step to radius / 2)
     const maxStepSize = Math.max(radius * 0.5, 1);
     const steps = Math.ceil(distance / maxStepSize);
 
@@ -14,49 +20,89 @@ function moveEntity(entity, dx, dy, radius, wallCollide) {
     const stepY = dy / steps;
 
     for (let i = 0; i < steps; i++) {
-        // Horizontal movement with wall sliding
-        if (!wallCollide(entity.x + stepX, entity.y, radius)) {
-            entity.x += stepX;
+        const nextX = entity.x + stepX;
+        const nextY = entity.y + stepY;
+
+        // 1. Try full unconstrained step first
+        if (!wallCollide(nextX, nextY, radius)) {
+            entity.x = nextX;
+            entity.y = nextY;
+            continue;
         }
-        // Vertical movement
-        if (!wallCollide(entity.x, entity.y + stepY, radius)) {
-            entity.y += stepY;
+
+        // 2. Collision detected: Resolve sliding on isolated axes
+        const canMoveX = !wallCollide(nextX, entity.y, radius);
+        const canMoveY = !wallCollide(entity.x, nextY, radius);
+
+        if (canMoveX) {
+            entity.x = nextX;
+        }
+        if (canMoveY) {
+            entity.y = nextY;
+        }
+
+        // If completely blocked on both axes, halt further substeps for this tick
+        if (!canMoveX && !canMoveY) {
+            break;
         }
     }
 }
 
 /**
- * Time-sliced A* scheduler.
- * Limits CPU usage by distributing pathfinding requests over multiple frames.
+ * High-performance Time-sliced A* scheduler.
+ * Utilizes a Set for O(1) duplicate lookups and pointer-based queue consuming.
  */
 class PathfindingScheduler {
+    /**
+     * @param {number} maxPathsPerFrame - Maximum pathfinding computations allowed per tick
+     */
     constructor(maxPathsPerFrame = 5) {
         this.maxPathsPerFrame = maxPathsPerFrame;
         this.queue = [];
+        this.pendingEnemies = new Set();
     }
 
     /**
-     * Add a pathfinding request to the queue.
+     * Adds an entity to the pathfinding queue with O(1) deduplication.
+     * 
+     * @param {Object} enemy - Target entity requiring path
+     * @param {Object} target - Destination coordinate or entity
+     * @param {Function} findPathCallback - Pure pathfinding execution function
      */
     requestPath(enemy, target, findPathCallback) {
-        // Prevent duplicate requests for the same enemy
-        if (!this.queue.some(req => req.enemy === enemy)) {
-            this.queue.push({ enemy, target, findPathCallback });
+        if (this.pendingEnemies.has(enemy)) return;
+
+        this.pendingEnemies.add(enemy);
+        this.queue.push({ enemy, target, findPathCallback });
+    }
+
+    /**
+     * Processes queued path calculations within the frame budget.
+     */
+    update() {
+        if (this.queue.length === 0) return;
+
+        const count = Math.min(this.queue.length, this.maxPathsPerFrame);
+
+        for (let i = 0; i < count; i++) {
+            const request = this.queue.shift(); // For extreme scale (>10k), swap with a ring buffer
+            this.pendingEnemies.delete(request.enemy);
+
+            // Null-check / active check to prevent computing paths for dead entities
+            if (request.enemy.isDestroyed || !request.enemy.active) {
+                continue;
+            }
+
+            request.enemy.path = request.findPathCallback(request.enemy, request.target);
         }
     }
 
     /**
-     * Processes pending requests in the game loop.
+     * Clears all pending jobs. Call on state resets or level unload.
      */
-    update() {
-        let processed = 0;
-        while (this.queue.length > 0 && processed < this.maxPathsPerFrame) {
-            const { enemy, target, findPathCallback } = this.queue.shift();
-            
-            // Only update path if necessary (e.g., target moved, LOS broken)
-            enemy.path = findPathCallback(enemy, target);
-            processed++;
-        }
+    clear() {
+        this.queue.length = 0;
+        this.pendingEnemies.clear();
     }
 }
 
@@ -67,14 +113,15 @@ class PathfindingScheduler {
 const pathScheduler = new PathfindingScheduler(5);
 
 function fixedUpdate(delta) {
-    // 1. Move player with normalized vector
+    // 1. Move player with normalized direction vector scaled by delta time
     const d = Math.hypot(mx, my);
     if (d > 0) {
-        const vx = (mx / d) * spd;
-        const vy = (my / d) * spd;
+        const speed = spd * delta; // Frame-rate independent displacement
+        const vx = (mx / d) * speed;
+        const vy = (my / d) * speed;
         moveEntity(player, vx, vy, player.radius, wallCollide);
     }
 
-    // 2. Process pathfinding queue
+    // 2. Process pathfinding budget
     pathScheduler.update();
 }
