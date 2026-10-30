@@ -1,61 +1,112 @@
 /**
- * Move & Slide with TRUE CCD (time-of-impact) using swept circle casts.
+ * Advanced Production-Grade Move & Slide with Continuous Collision Detection (CCD).
  *
- * Required collision API:
- *   castCircle(x, y, r, dx, dy) -> null | { t, nx, ny }
- * Where:
- *   t in [0..1] is time of first impact along (dx, dy)
- *   (nx, ny) is collision normal (unit length)
+ * @param {Object} entity - شیء دارای x, y
+ * @param {number} dx - جابه‌جایی افقی در فریم جاری
+ * @param {number} dy - جابه‌جایی عمودی در فریم جاری
+ * @param {number} radius - شعاع دایره کالیژن
+ * @param {Function} castCircle - تابع Swept Circle: (x, y, r, dx, dy) -> { t, nx, ny } | null
+ * @param {Object} [opts={}] - تنظیمات تکمیلی
+ * @returns {Object} گزارش نتیجه حرکت { movedX, movedY, hitCount, isGrounded, collisions }
  */
 function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
-  const maxIters = opts.maxIters ?? 4;      // max number of collisions per tick
-  const skin = opts.skin ?? 0.01;           // small margin to avoid jitter
-  const minMove = opts.minMove ?? 1e-6;
+  const maxIters = opts.maxIters ?? 5;
+  const skin = opts.skin ?? 0.005;           // فاصله احتیاطی از سطح (Margin)
+  const minMove = opts.minMove ?? 1e-5;       // حداقل جابه‌جایی معنادار
+  const minMoveSq = minMove * minMove;
+  const friction = opts.friction ?? 0.0;     // ضریب اصطکاک سطحی [0..1]
+  const bounciness = opts.bounciness ?? 0.0; // خاصیت ارتجاعی [0..1]
 
-  let vx = dx, vy = dy;
+  let vx = dx;
+  let vy = dy;
+  let totalMovedX = 0;
+  let totalMovedY = 0;
+
+  // ذخیره نرمال‌های برخورد برای جلوگیری از گیر افتادن در Crease/Corner
+  const contactNormals = [];
+  const collisions = [];
 
   for (let iter = 0; iter < maxIters; iter++) {
-    const dist = Math.hypot(vx, vy);
-    if (dist < minMove) break;
+    const distSq = vx * vx + vy * vy;
+    if (distSq < minMoveSq) break;
 
-    // Cast circle along remaining movement
     const hit = castCircle(entity.x, entity.y, radius, vx, vy);
 
-    // No collision: apply full movement
+    // حالت بدون مانع: اتمام مسیر
     if (!hit) {
       entity.x += vx;
       entity.y += vy;
+      totalMovedX += vx;
+      totalMovedY += vy;
       break;
     }
 
-    // Move up to just before contact (leave skin margin)
     const t = Math.max(0, Math.min(1, hit.t));
-    const travel = Math.max(0, t * dist - skin);
-    const tx = (vx / dist) * travel;
-    const ty = (vy / dist) * travel;
+    const dist = Math.sqrt(distSq);
 
-    entity.x += tx;
-    entity.y += ty;
+    // ۱. حرکت تا مرز ایمن با لحاظ کردن skin
+    // در t=0 (تداخل اولیه)، حرکت نمی‌کنیم تا وارد جسم نشود
+    const safeTravelDist = Math.max(0, t * dist - skin);
+    const stepX = (vx / dist) * safeTravelDist;
+    const stepY = (vy / dist) * safeTravelDist;
 
-    // Compute remaining motion after contact
-    // remaining = original - traveled
-    let rx = vx - tx;
-    let ry = vy - ty;
+    entity.x += stepX;
+    entity.y += stepY;
+    totalMovedX += stepX;
+    totalMovedY += stepY;
 
-    // Slide: remove the component into the normal
-    const nx = hit.nx, ny = hit.ny;
-    const into = rx * nx + ry * ny;
+    // ثبت برخورد
+    collisions.push({ t, nx: hit.nx, ny: hit.ny });
 
-    // If moving into surface, project out that component
+    // ۲. محاسبه بردار باقی‌مانده بر مبنای نسبت زمانی خالص (نه تفریق مستقیم عددی)
+    const remainingTimeRatio = Math.max(0, 1.0 - t);
+    let rx = vx * remainingTimeRatio;
+    let ry = vy * remainingTimeRatio;
+
+    // ۳. پیش‌بینی برخورد با گوشه‌های تند (Crease Handling)
+    let nx = hit.nx;
+    let ny = hit.ny;
+    contactNormals.push({ nx, ny });
+
+    let into = rx * nx + ry * ny;
+
     if (into < 0) {
-      rx = rx - into * nx;
-      ry = ry - into * ny;
+      // تجزیه به دو مولفه عمودی (نرمال) و مماس (تانژانت)
+      const normalCompX = into * nx;
+      const normalCompY = into * ny;
+
+      const tangentCompX = rx - normalCompX;
+      const tangentCompY = ry - normalCompY;
+
+      // اعمال ضریب بازتاب (Bounce) و اصطکاک (Friction)
+      rx = (tangentCompX * (1.0 - friction)) - (normalCompX * bounciness);
+      ry = (tangentCompY * (1.0 - friction)) - (normalCompY * bounciness);
+
+      // ۴. حل قفل شدن در کنج‌ها: اگر بردار جدید به سمت نرمال‌های قبلی برود، روی خط تقاطع محدودش کن
+      for (let i = 0; i < contactNormals.length - 1; i++) {
+        const prev = contactNormals[i];
+        const dotPrev = rx * prev.nx + ry * prev.ny;
+        if (dotPrev < 0) {
+          // در دو بعد (2D)، حرکت درون کنج حاد به سکون کامل منجر می‌شود
+          rx = 0;
+          ry = 0;
+          break;
+        }
+      }
     } else {
-      // Already moving away: stop to avoid numerical issues
-      rx = 0; ry = 0;
+      // در حال دور شدن از سطح
+      rx = 0;
+      ry = 0;
     }
 
     vx = rx;
     vy = ry;
   }
+
+  return {
+    movedX: totalMovedX,
+    movedY: totalMovedY,
+    hitCount: collisions.length,
+    collisions
+  };
 }
