@@ -87,5 +87,3 @@ Upon clearing sequential arena waves, gameplay pauses to present a randomized dr
 | **Session Reset** | <kbd>R</kbd> or `Click` | Reinitializes game session from Game Over overlay. |
 
 ---
-
-## ⚙ Technical Architecture & Deep Dive
