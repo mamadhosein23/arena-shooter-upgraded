@@ -1,329 +1,82 @@
-@import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=JetBrains+Mono:wght@400;700;800&display=swap");
-
 :root {
-  /* =========================================
-     Design Tokens (Strict System)
-     ========================================= */
-  --bg-base: #02040a;
-  --text-main: #eaf2ff;
-  --text-muted: #93a4c7;
-
-  /* Theme Accents (Default: Cyan HSL 170) */
-  --hue: 170;
-  --primary: hsl(var(--hue) 100% 55%);
-  --primary-dim: hsl(var(--hue) 75% 32%);
-  --secondary: hsl(calc(var(--hue) + 35) 95% 62%);
-
-  /* State Tokens */
-  --danger: #ff2a5f;
-  --danger-dim: #7a0028;
-
-  /* Glassmorphism & Layers */
-  --surface-glass: rgba(6, 12, 28, 0.78);
-  --surface-panel: rgba(8, 16, 34, 0.88);
-  --stroke-dim: hsla(var(--hue) 100% 70% / 0.22);
-  --stroke-bright: hsla(var(--hue) 100% 70% / 0.75);
-
-  --shadow-elevation: 0 16px 40px rgba(0, 0, 0, 0.7);
-  --bloom-glow: 0 0 16px hsla(var(--hue) 100% 60% / 0.4);
-
-  /* Geometry & Chamfers */
-  --corner-cut: 12px;
-  --clip-chamfer: polygon(
-    0 var(--corner-cut),
-    var(--corner-cut) 0,
-    calc(100% - var(--corner-cut)) 0,
-    100% var(--corner-cut),
-    100% calc(100% - var(--corner-cut)),
-    calc(100% - var(--corner-cut)) 100%,
-    var(--corner-cut) 100%,
-    0 calc(100% - var(--corner-cut))
-  );
-
-  /* Typography */
-  --font-display: "Chakra Petch", system-ui, -apple-system, sans-serif;
-  --font-code: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  /* تنظیمات هسته (Core Engine) */
+  --sys-hue: 170;
+  --sys-primary: hsl(var(--sys-hue) 100% 55%);
+  --sys-bg: #02040a;
+  
+  /* مقادیر طراحی */
+  --corner-size: 8px;
+  --border-width: 1px;
+  --timing-fn: cubic-bezier(0.19, 1, 0.22, 1);
 }
 
-/* Theme Switcher */
-body[data-theme="cyan"]    { --hue: 170; }
-body[data-theme="amber"]   { --hue: 42;  }
-body[data-theme="crimson"] { --hue: 345; --danger: #ff004c; }
+/* سیستم داده-محور (Data-Driven States) */
+[data-status="critical"] { --sys-hue: 345; --accent-intensity: 1.5; }
+[data-status="active"]   { --sys-hue: 170; --accent-intensity: 1; }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html, body {
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
-  margin: 0;
-  overflow: hidden;
-  background-color: var(--bg-base);
-  color: var(--text-main);
-  font-family: var(--font-display);
-  user-select: none;
-  -webkit-user-select: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Canvas Viewport */
-#gameCanvas {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  z-index: 1;
-}
-
-/* =========================================
-   Unified Post-Processing Overlay
-   (ادغام لایه‌های پس‌زمینه برای کاهش Draw-Call و افت فریم)
-   ========================================= */
-.screen-fx {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
-  background:
-    /* Vignette */
-    radial-gradient(circle at 50% 40%, transparent 40%, rgba(0, 0, 0, 0.75) 100%),
-    /* Grid */
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 100% 100%, 64px 64px, 64px 64px;
-}
-
-/* خطوط اسکن با ترکیب سبک */
-.screen-fx::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.18;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent 0px,
-    transparent 2px,
-    rgba(0, 0, 0, 0.6) 3px
-  );
-}
-
-/* =========================================
-   HUD Architecture
-   ========================================= */
-.hud {
-  position: fixed;
-  inset-block-start: 16px;
-  inset-inline: 16px;
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  pointer-events: none;
-  z-index: 20;
-}
-
-/* Chamfered Panels with Pure CSS Glow Borders */
 .panel {
-  position: relative;
-  min-width: 220px;
-  padding: 14px 16px;
-  background: var(--surface-panel);
-  clip-path: var(--clip-chamfer);
-  box-shadow: var(--shadow-elevation);
-  pointer-events: auto;
-  border: 1px solid var(--stroke-dim);
-}
-
-/* شبه لبه نئونی (Corner Accent Lines) */
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  clip-path: var(--clip-chamfer);
-  border: 1px solid var(--stroke-bright);
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-/* فوتر تله‌متری کنترل پنل */
-.panel::after {
-  content: "SYS // LINK:OK [SYNC]";
-  display: block;
-  margin-top: 8px;
-  font-family: var(--font-code);
-  font-size: 8px;
-  letter-spacing: 0.18em;
-  color: var(--stroke-bright);
-  opacity: 0.8;
-}
-
-.panel h3 {
-  margin: 0 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: var(--font-code);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--primary);
-  text-shadow: var(--bloom-glow);
-}
-
-.panel h3::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 8px var(--primary);
-  margin-inline-end: 8px;
-}
-
-.row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.mono {
-  font-family: var(--font-code);
-  font-variant-numeric: tabular-nums;
-}
-
-.muted {
-  color: var(--text-muted);
-}
-
-/* =========================================
-   Progress Bars (Segmented Engine)
-   ========================================= */
-.bar {
-  position: relative;
-  margin-top: 8px;
-  height: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--stroke-dim);
-  overflow: hidden;
-  clip-path: polygon(
-    0 0,
-    calc(100% - 6px) 0,
-    100% 6px,
-    100% 100%,
-    6px 100%,
-    0 calc(100% - 6px)
-  );
-}
-
-/* تقسیم‌بندی بصری گیج */
-.bar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent 0 8px,
-    rgba(2, 4, 10, 0.8) 8px 10px
-  );
-  pointer-events: none;
-}
-
-.bar > i {
-  display: block;
-  height: 100%;
-  width: 100%;
-  transform-origin: left center;
-  background: linear-gradient(90deg, var(--primary-dim), var(--primary));
-  box-shadow: var(--bloom-glow);
+  /* بهینه‌سازی رندر */
+  contain: strict;
   will-change: transform;
+  
+  position: relative;
+  background: linear-gradient(135deg, rgba(8, 16, 34, 0.9), rgba(2, 4, 10, 0.95));
+  border: var(--border-width) solid hsla(var(--sys-hue), 100%, 60%, 0.3);
+  padding: 16px;
+  
+  /* استفاده از ماسک برای جلوگیری از باگ‌های Border با Clip-path */
+  --mask-clip: polygon(0 0, 100% 0, 100% calc(100% - var(--corner-size)), calc(100% - var(--corner-size)) 100%, 0 100%);
+  clip-path: var(--mask-clip);
 }
 
-/* استیت Dash / Boost */
-.bar.dash > i {
-  background: linear-gradient(90deg, hsl(200 100% 35%), var(--secondary));
+/* کامپوننت نوار پیشرفت (High-Fidelity Gauge) */
+.gauge {
+  height: 6px;
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  position: relative;
 }
 
-/* استیت اخطار بحرانی (Danger State) */
-.bar.danger {
-  border-color: var(--danger);
-}
-.bar.danger > i {
-  background: linear-gradient(90deg, var(--danger-dim), var(--danger));
-  box-shadow: 0 0 12px var(--danger);
-  animation: dangerPulse 0.8s ease-in-out infinite alternate;
+.gauge__fill {
+  height: 100%;
+  width: var(--progress, 50%);
+  background: hsl(var(--sys-hue), 100%, 50%);
+  box-shadow: 0 0 15px hsla(var(--sys-hue), 100%, 50%, 0.5);
+  transition: width 0.4s var(--timing-fn), background-color 0.3s;
 }
 
-@keyframes dangerPulse {
-  from { opacity: 0.8; }
-  to { opacity: 1; filter: brightness(1.2); }
+/* افکت گلایچ سیستماتیک (System-wide Glitch Module) */
+.glitch-container {
+  position: relative;
 }
 
-/* =========================================
-   Buttons & Interactive Elements
-   ========================================= */
-button {
-  appearance: none;
-  border: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 18px;
-  background: rgba(0, 255, 204, 0.07);
-  border: 1px solid var(--stroke-bright);
-  clip-path: polygon(
-    0 0,
-    calc(100% - 10px) 0,
-    100% 10px,
-    100% 100%,
-    10px 100%,
-    0 calc(100% - 10px)
-  );
-  font-family: var(--font-code);
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: 0.14em;
+.glitch-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: hsla(var(--sys-hue), 100%, 50%, 0.2);
+  mix-blend-mode: overlay;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* انیمیشن‌های گسسته (Stepped Animations for Terminal Feel) */
+@keyframes terminal-flicker {
+  0% { opacity: 0.9; transform: skew(0.5deg); }
+  5% { opacity: 1; transform: skew(-0.5deg); }
+  10% { opacity: 0.9; }
+  100% { opacity: 1; }
+}
+
+[data-status="critical"] .panel {
+  animation: terminal-flicker 0.1s steps(2) infinite;
+}
+
+/* تایپوگرافی مهندسی */
+.hud-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--text-main);
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
-}
-
-button:hover {
-  background: rgba(0, 255, 204, 0.2);
-  border-color: var(--primary);
-  box-shadow: var(--bloom-glow);
-}
-
-button:active {
-  transform: translateY(1px);
-  background: var(--primary);
-  color: #02040a;
-}
-
-button:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 3px;
-}
-
-/* =========================================
-   Reduced Motion (A11y)
-   ========================================= */
-@media (prefers-reduced-motion: reduce) {
-  .bar.danger > i {
-    animation: none;
-  }
-  button {
-    transition: none;
-  }
+  color: hsl(var(--sys-hue), 100%, 80%);
 }
