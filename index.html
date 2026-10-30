@@ -1,112 +1,119 @@
 /**
- * Advanced Production-Grade Move & Slide with Continuous Collision Detection (CCD).
- *
- * @param {Object} entity - شیء دارای x, y
- * @param {number} dx - جابه‌جایی افقی در فریم جاری
- * @param {number} dy - جابه‌جایی عمودی در فریم جاری
- * @param {number} radius - شعاع دایره کالیژن
- * @param {Function} castCircle - تابع Swept Circle: (x, y, r, dx, dy) -> { t, nx, ny } | null
- * @param {Object} [opts={}] - تنظیمات تکمیلی
- * @returns {Object} گزارش نتیجه حرکت { movedX, movedY, hitCount, isGrounded, collisions }
+ * Ultra-Performance Continuous Collision Detection (CCD) Move & Slide
+ * Optimized for 2D platforms, top-down games, and high-velocity entities.
+ * 
+ * @param {Object} entity - Mutable position container { x, y }
+ * @param {number} dx - Target delta X
+ * @param {number} dy - Target delta Y
+ * @param {number} radius - Bounding circle radius
+ * @param {Function} castCircle - (x, y, r, dx, dy) => { t, nx, ny } | null
+ * @param {Object} [opts] - Configuration options
+ * @returns {Object} Result metrics { x, y, hitCount, isStuck }
  */
-function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
-  const maxIters = opts.maxIters ?? 5;
-  const skin = opts.skin ?? 0.005;           // فاصله احتیاطی از سطح (Margin)
-  const minMove = opts.minMove ?? 1e-5;       // حداقل جابه‌جایی معنادار
-  const minMoveSq = minMove * minMove;
-  const friction = opts.friction ?? 0.0;     // ضریب اصطکاک سطحی [0..1]
-  const bounciness = opts.bounciness ?? 0.0; // خاصیت ارتجاعی [0..1]
+function moveEntityCCDPro(entity, dx, dy, radius, castCircle, opts = {}) {
+  const maxIters = opts.maxIters ?? 6;
+  const skin = opts.skin ?? 0.002;
+  const minMove = opts.minMove ?? 1e-6;
+  const bounce = opts.bounce ?? 0.0;
+  const friction = opts.friction ?? 0.0;
 
   let vx = dx;
   let vy = dy;
-  let totalMovedX = 0;
-  let totalMovedY = 0;
+  let hitCount = 0;
+  let isStuck = false;
 
-  // ذخیره نرمال‌های برخورد برای جلوگیری از گیر افتادن در Crease/Corner
-  const contactNormals = [];
-  const collisions = [];
+  // Static buffers to avoid GC allocations during high-frequency loops
+  let n1x = 0, n1y = 0;
+  let n2x = 0, n2y = 0;
+  let planeCount = 0;
 
   for (let iter = 0; iter < maxIters; iter++) {
-    const distSq = vx * vx + vy * vy;
-    if (distSq < minMoveSq) break;
+    const vLenSq = vx * vx + vy * vy;
+    if (vLenSq < minMove * minMove) break;
 
+    const vLen = Math.sqrt(vLenSq);
     const hit = castCircle(entity.x, entity.y, radius, vx, vy);
 
-    // حالت بدون مانع: اتمام مسیر
     if (!hit) {
       entity.x += vx;
       entity.y += vy;
-      totalMovedX += vx;
-      totalMovedY += vy;
       break;
     }
 
+    hitCount++;
     const t = Math.max(0, Math.min(1, hit.t));
-    const dist = Math.sqrt(distSq);
+    
+    // Move up to the impact point minus skin margin
+    const travel = Math.max(0, t * vLen - skin);
+    const stepRatio = travel / vLen;
+    
+    entity.x += vx * stepRatio;
+    entity.y += vy * stepRatio;
 
-    // ۱. حرکت تا مرز ایمن با لحاظ کردن skin
-    // در t=0 (تداخل اولیه)، حرکت نمی‌کنیم تا وارد جسم نشود
-    const safeTravelDist = Math.max(0, t * dist - skin);
-    const stepX = (vx / dist) * safeTravelDist;
-    const stepY = (vy / dist) * safeTravelDist;
+    // Remaining velocity vector scaling
+    const remRatio = Math.max(0, 1.0 - t);
+    let rx = vx * remRatio;
+    let ry = vy * remRatio;
 
-    entity.x += stepX;
-    entity.y += stepY;
-    totalMovedX += stepX;
-    totalMovedY += stepY;
+    const nx = hit.nx;
+    const ny = hit.ny;
 
-    // ثبت برخورد
-    collisions.push({ t, nx: hit.nx, ny: hit.ny });
-
-    // ۲. محاسبه بردار باقی‌مانده بر مبنای نسبت زمانی خالص (نه تفریق مستقیم عددی)
-    const remainingTimeRatio = Math.max(0, 1.0 - t);
-    let rx = vx * remainingTimeRatio;
-    let ry = vy * remainingTimeRatio;
-
-    // ۳. پیش‌بینی برخورد با گوشه‌های تند (Crease Handling)
-    let nx = hit.nx;
-    let ny = hit.ny;
-    contactNormals.push({ nx, ny });
-
-    let into = rx * nx + ry * ny;
-
-    if (into < 0) {
-      // تجزیه به دو مولفه عمودی (نرمال) و مماس (تانژانت)
-      const normalCompX = into * nx;
-      const normalCompY = into * ny;
-
-      const tangentCompX = rx - normalCompX;
-      const tangentCompY = ry - normalCompY;
-
-      // اعمال ضریب بازتاب (Bounce) و اصطکاک (Friction)
-      rx = (tangentCompX * (1.0 - friction)) - (normalCompX * bounciness);
-      ry = (tangentCompY * (1.0 - friction)) - (normalCompY * bounciness);
-
-      // ۴. حل قفل شدن در کنج‌ها: اگر بردار جدید به سمت نرمال‌های قبلی برود، روی خط تقاطع محدودش کن
-      for (let i = 0; i < contactNormals.length - 1; i++) {
-        const prev = contactNormals[i];
-        const dotPrev = rx * prev.nx + ry * prev.ny;
-        if (dotPrev < 0) {
-          // در دو بعد (2D)، حرکت درون کنج حاد به سکون کامل منجر می‌شود
-          rx = 0;
-          ry = 0;
-          break;
-        }
+    // Add plane to constraint solver
+    if (planeCount === 0) {
+      n1x = nx; n1y = ny;
+      planeCount = 1;
+    } else if (planeCount === 1) {
+      // Check if it's a completely different plane (Wedge / Corner)
+      const dot = n1x * nx + n1y * ny;
+      if (dot < 0.99) {
+        n2x = nx; n2y = ny;
+        planeCount = 2;
       }
     } else {
-      // در حال دور شدن از سطح
-      rx = 0;
-      ry = 0;
+      // Stuck in a tight corner / multi-plane intersection
+      isStuck = true;
+      vx = 0;
+      vy = 0;
+      break;
+    }
+
+    // Multi-plane slide projection
+    if (planeCount === 1) {
+      const into = rx * n1x + ry * n1y;
+      if (into < 0) {
+        rx = (rx - into * n1x) * (1.0 - friction) - (into * n1x * bounce);
+        ry = (ry - into * n1y) * (1.0 - friction) - (into * n1y * bounce);
+      } else {
+        rx = 0; ry = 0;
+      }
+    } else if (planeCount === 2) {
+      // Intersection line direction (Cross product with Z-axis in 2D)
+      // For 2D planes, solving velocity along the intersection of two normals:
+      const det = n1x * n2y - n1y * n2x;
+      if (Math.abs(det) < 1e-5) {
+        // Parallel or identical planes, collapse movement
+        rx = 0; ry = 0;
+      } else {
+        // Project remaining velocity onto the crease line vector
+        const d1 = rx * n1x + ry * n1y;
+        const d2 = rx * n2x + ry * n2y;
+        
+        if (d1 < 0) { rx -= d1 * n1x; ry -= d1 * n1y; }
+        if (d2 < 0) { rx -= d2 * n2x; ry -= d2 * n2y; }
+
+        // Final double-check along the crease edge
+        const edgeX = n1y * n2y - (-n1x) * (-n2x); // simplified edge check
+        const edgeDot = rx * n1x + ry * n1y;
+        if (edgeDot < 0) {
+          rx = 0; 
+          ry = 0;
+        }
+      }
     }
 
     vx = rx;
     vy = ry;
   }
 
-  return {
-    movedX: totalMovedX,
-    movedY: totalMovedY,
-    hitCount: collisions.length,
-    collisions
-  };
+  return { x: entity.x, y: entity.y, hitCount, isStuck };
 }
