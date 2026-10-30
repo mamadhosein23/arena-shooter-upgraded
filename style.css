@@ -1,265 +1,191 @@
-/* Optional: load fonts (remove if you already load fonts elsewhere) */
 @import url("https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=JetBrains+Mono:wght@400;700;800&display=swap");
 
 :root {
-  /* =========================
-     Design Tokens (Core)
-     ========================= */
-  --bg: #02040a;
-  --ink: #eaf2ff;
-  --muted: #93a4c7;
+  /* =========================================
+     Design Tokens (Strict System)
+     ========================================= */
+  --bg-base: #02040a;
+  --text-main: #eaf2ff;
+  --text-muted: #93a4c7;
 
+  /* Theme Accents (Default: Cyan HSL 170) */
   --hue: 170;
-  --accent: hsl(var(--hue) 100% 55%);
-  --accent-2: hsl(calc(var(--hue) + 35) 95% 62%);
-  --accent-dim: hsl(var(--hue) 70% 35%);
+  --primary: hsl(var(--hue) 100% 55%);
+  --primary-dim: hsl(var(--hue) 75% 32%);
+  --secondary: hsl(calc(var(--hue) + 35) 95% 62%);
 
+  /* State Tokens */
   --danger: #ff2a5f;
+  --danger-dim: #7a0028;
 
-  --glass: rgba(8, 16, 34, 0.62);
-  --glass-2: rgba(6, 12, 28, 0.82);
-  --stroke: hsla(var(--hue) 100% 70% / 0.25);
-  --stroke-strong: hsla(var(--hue) 100% 70% / 0.62);
+  /* Glassmorphism & Layers */
+  --surface-glass: rgba(6, 12, 28, 0.78);
+  --surface-panel: rgba(8, 16, 34, 0.88);
+  --stroke-dim: hsla(var(--hue) 100% 70% / 0.22);
+  --stroke-bright: hsla(var(--hue) 100% 70% / 0.75);
 
-  --shadow: 0 12px 50px rgba(0, 0, 0, 0.65);
-  --bloom: 0 0 18px hsla(var(--hue) 100% 60% / 0.35);
+  --shadow-elevation: 0 16px 40px rgba(0, 0, 0, 0.7);
+  --bloom-glow: 0 0 16px hsla(var(--hue) 100% 60% / 0.4);
 
-  --r: 16px;
-  --cut: 12px;
-
-  --font-sans: "Chakra Petch", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  /* Clip corners */
-  --clip: polygon(
-    0 var(--cut),
-    var(--cut) 0,
-    calc(100% - var(--cut)) 0,
-    100% var(--cut),
-    100% calc(100% - var(--cut)),
-    calc(100% - var(--cut)) 100%,
-    var(--cut) 100%,
-    0 calc(100% - var(--cut))
+  /* Geometry & Chamfers */
+  --corner-cut: 12px;
+  --clip-chamfer: polygon(
+    0 var(--corner-cut),
+    var(--corner-cut) 0,
+    calc(100% - var(--corner-cut)) 0,
+    100% var(--corner-cut),
+    100% calc(100% - var(--corner-cut)),
+    calc(100% - var(--corner-cut)) 100%,
+    var(--corner-cut) 100%,
+    0 calc(100% - var(--corner-cut))
   );
 
-  /* Performance knobs */
-  --scan-opacity: 0.25;
-  --noise-opacity: 0.08;
-  --grid-opacity: 0.10;
-  --vignette-opacity: 0.55;
+  /* Typography */
+  --font-display: "Chakra Petch", system-ui, -apple-system, sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 
-/* Themes (switch by body[data-theme="..."]) */
-body[data-theme="cyan"]   { --hue: 170; }
-body[data-theme="amber"]  { --hue:  42; }
-body[data-theme="crimson"]{ --hue: 345; --danger: #ff004c; }
+/* Theme Switcher */
+body[data-theme="cyan"]    { --hue: 170; }
+body[data-theme="amber"]   { --hue: 42;  }
+body[data-theme="crimson"] { --hue: 345; --danger: #ff004c; }
 
 *,
 *::before,
-*::after { box-sizing: border-box; }
+*::after {
+  box-sizing: border-box;
+}
 
 html, body {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   height: 100dvh;
   margin: 0;
   overflow: hidden;
-  background: radial-gradient(1200px 800px at 20% 10%, rgba(0,255,204,0.06), transparent 55%),
-              radial-gradient(900px 700px at 85% 40%, rgba(56,189,248,0.04), transparent 60%),
-              var(--bg);
-  color: var(--ink);
-  font-family: var(--font-sans);
+  background-color: var(--bg-base);
+  color: var(--text-main);
+  font-family: var(--font-display);
   user-select: none;
   -webkit-user-select: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-/* =========================
-   Ultra Overlay Stack
-   (Noise + Grid + Scan + Vignette)
-   ========================= */
-
-/* 1) Grid */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 900;
-  opacity: var(--grid-opacity);
-  background:
-    linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
-  background-size: 64px 64px, 64px 64px;
-  mask-image: radial-gradient(circle at 40% 20%, black 0%, transparent 65%);
-}
-
-/* 2) Noise (pure CSS: multi-radial) */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 901;
-  opacity: var(--noise-opacity);
-  background:
-    radial-gradient(circle at 10% 20%, rgba(255,255,255,0.06) 0 1px, transparent 2px),
-    radial-gradient(circle at 30% 80%, rgba(255,255,255,0.05) 0 1px, transparent 2px),
-    radial-gradient(circle at 70% 40%, rgba(255,255,255,0.06) 0 1px, transparent 2px),
-    radial-gradient(circle at 90% 10%, rgba(255,255,255,0.05) 0 1px, transparent 2px);
-  background-size: 180px 140px, 240px 200px, 220px 170px, 260px 210px;
-  mix-blend-mode: overlay;
-}
-
-/* Scanlines layer */
-#scanlines {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 902;
-  opacity: var(--scan-opacity);
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(0,0,0,0.0) 0px,
-      rgba(0,0,0,0.0) 2px,
-      rgba(0,0,0,0.35) 3px
-    );
-}
-
-/* Vignette */
-#vignette {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 903;
-  opacity: var(--vignette-opacity);
-  background: radial-gradient(1100px 900px at 50% 35%, transparent 0%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0.82) 100%);
-}
-
-/* Optional: subtle flicker */
-@keyframes flicker {
-  0%, 100% { opacity: 1; }
-  55% { opacity: 0.96; }
-  60% { opacity: 0.985; }
-  63% { opacity: 0.94; }
-}
-#scanlines, #vignette { animation: flicker 7s infinite; }
-
+/* Canvas Viewport */
 #gameCanvas {
   position: fixed;
   inset: 0;
-  display: block;
   width: 100%;
   height: 100%;
+  display: block;
   z-index: 1;
 }
 
-/* =========================
-   HUD (diegetic)
-   ========================= */
+/* =========================================
+   Unified Post-Processing Overlay
+   (ادغام لایه‌های پس‌زمینه برای کاهش Draw-Call و افت فریم)
+   ========================================= */
+.screen-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  background:
+    /* Vignette */
+    radial-gradient(circle at 50% 40%, transparent 40%, rgba(0, 0, 0, 0.75) 100%),
+    /* Grid */
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 64px 64px, 64px 64px;
+}
+
+/* خطوط اسکن با ترکیب سبک */
+.screen-fx::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.6) 3px
+  );
+}
+
+/* =========================================
+   HUD Architecture
+   ========================================= */
 .hud {
   position: fixed;
-  inset-block-start: 20px;
-  inset-inline: 20px;
+  inset-block-start: 16px;
+  inset-inline: 16px;
   display: flex;
-  align-items: flex-start;
+  justify-content: space-between;
   gap: 16px;
   pointer-events: none;
-  z-index: 50;
-  isolation: isolate;
+  z-index: 20;
 }
 
-/* Panels become "devices" */
+/* Chamfered Panels with Pure CSS Glow Borders */
 .panel {
   position: relative;
-  min-width: 230px;
-  padding: 14px 16px 16px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent 40%),
-              var(--glass);
-  border: 1px solid var(--stroke);
-  clip-path: var(--clip);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px) saturate(170%);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  contain: layout style paint;
-  transform: translateZ(0);
+  min-width: 220px;
+  padding: 14px 16px;
+  background: var(--surface-panel);
+  clip-path: var(--clip-chamfer);
+  box-shadow: var(--shadow-elevation);
+  pointer-events: auto;
+  border: 1px solid var(--stroke-dim);
 }
 
-/* Hologram edge bloom */
+/* شبه لبه نئونی (Corner Accent Lines) */
 .panel::before {
   content: "";
   position: absolute;
-  inset: -1px;
-  clip-path: var(--clip);
-  border-radius: var(--r);
-  background:
-    linear-gradient(90deg,
-      transparent 0%,
-      hsla(var(--hue) 100% 60% / 0.20) 20%,
-      transparent 40%,
-      hsla(var(--hue) 100% 60% / 0.20) 60%,
-      transparent 80%,
-      transparent 100%);
-  opacity: 0.8;
-  filter: blur(0.2px);
+  inset: 0;
+  clip-path: var(--clip-chamfer);
+  border: 1px solid var(--stroke-bright);
+  opacity: 0.6;
   pointer-events: none;
-  mix-blend-mode: screen;
 }
 
-/* Circuit markings + telemetry */
+/* فوتر تله‌متری کنترل پنل */
 .panel::after {
-  content: "SYS // HUD  •  LINK:OK  •  CLK:" attr(data-clock);
-  position: absolute;
-  inset-inline: 14px;
-  inset-block-end: 8px;
-  font-family: var(--font-mono);
+  content: "SYS // LINK:OK [SYNC]";
+  display: block;
+  margin-top: 8px;
+  font-family: var(--font-code);
   font-size: 8px;
   letter-spacing: 0.18em;
-  color: hsla(var(--hue) 100% 60% / 0.55);
-  opacity: 0.9;
-  pointer-events: none;
+  color: var(--stroke-bright);
+  opacity: 0.8;
 }
 
-/* Header */
 .panel h3 {
   margin: 0 0 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: hsla(var(--hue) 100% 65% / 0.95);
-  text-shadow: var(--bloom);
+  color: var(--primary);
+  text-shadow: var(--bloom-glow);
 }
 
-/* left status dot + right badge */
 .panel h3::before {
   content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 12px hsla(var(--hue) 100% 60% / 0.8);
-  margin-inline-end: 10px;
-}
-.panel h3::after {
-  content: "LIVE";
-  padding: 2px 6px;
-  border: 1px solid var(--stroke);
-  background: rgba(0, 255, 204, 0.05);
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-  color: var(--muted);
-  font-size: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+  margin-inline-end: 8px;
 }
 
-/* Rows */
 .row {
   display: flex;
   align-items: baseline;
@@ -270,26 +196,35 @@ body::after {
 }
 
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-variant-numeric: tabular-nums;
 }
 
-.muted { color: var(--muted); }
-
-/* =========================
-   Progress Bars (segmented + shimmer + warning)
-   ========================= */
-.bar {
-  position: relative;
-  margin-top: 10px;
-  height: 10px;
-  overflow: hidden;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.10);
-  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+.muted {
+  color: var(--text-muted);
 }
 
-/* segmentation overlay */
+/* =========================================
+   Progress Bars (Segmented Engine)
+   ========================================= */
+.bar {
+  position: relative;
+  margin-top: 8px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--stroke-dim);
+  overflow: hidden;
+  clip-path: polygon(
+    0 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% 100%,
+    6px 100%,
+    0 calc(100% - 6px)
+  );
+}
+
+/* تقسیم‌بندی بصری گیج */
 .bar::before {
   content: "";
   position: absolute;
@@ -297,241 +232,98 @@ body::after {
   z-index: 2;
   background: repeating-linear-gradient(
     90deg,
-    transparent 0 10px,
-    rgba(0,0,0,0.75) 10px 12px
+    transparent 0 8px,
+    rgba(2, 4, 10, 0.8) 8px 10px
   );
-  opacity: 0.55;
   pointer-events: none;
-}
-
-/* shimmer */
-.bar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  background: linear-gradient(110deg,
-    transparent 0%,
-    rgba(255,255,255,0.25) 45%,
-    transparent 60%);
-  transform: translateX(-120%);
-  animation: shimmer 1.8s linear infinite;
-  mix-blend-mode: screen;
-  pointer-events: none;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(120%); }
 }
 
 .bar > i {
-  position: relative;
   display: block;
-  width: 100%;
   height: 100%;
-  transform: scaleX(1);
+  width: 100%;
   transform-origin: left center;
-  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
-  box-shadow: var(--bloom);
+  background: linear-gradient(90deg, var(--primary-dim), var(--primary));
+  box-shadow: var(--bloom-glow);
   will-change: transform;
 }
 
-/* Dash bar */
+/* استیت Dash / Boost */
 .bar.dash > i {
-  background: linear-gradient(90deg, hsl(199 100% 35%), hsl(199 100% 60%));
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.45);
+  background: linear-gradient(90deg, hsl(200 100% 35%), var(--secondary));
 }
 
-/* Danger state: apply on container .panel.critical or .bar.danger */
-.panel.critical,
+/* استیت اخطار بحرانی (Danger State) */
 .bar.danger {
-  border-color: rgba(255, 42, 95, 0.55) !important;
+  border-color: var(--danger);
 }
 .bar.danger > i {
-  background: linear-gradient(90deg, #7a0028, var(--danger));
-  box-shadow: 0 0 18px rgba(255, 42, 95, 0.45);
-  animation: dangerPulse 0.7s ease-in-out infinite alternate;
+  background: linear-gradient(90deg, var(--danger-dim), var(--danger));
+  box-shadow: 0 0 12px var(--danger);
+  animation: dangerPulse 0.8s ease-in-out infinite alternate;
 }
+
 @keyframes dangerPulse {
-  from { filter: brightness(1); }
-  to { filter: brightness(1.35); }
+  from { opacity: 0.8; }
+  to { opacity: 1; filter: brightness(1.2); }
 }
 
-/* =========================
-   Overlay / Modal (holo glass)
-   ========================= */
-#overlay-screen {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  overflow: auto;
-  z-index: 100;
-  background: rgba(2,4,10,0.86);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.overlay-card {
-  position: relative;
-  width: min(560px, 100%);
-  padding: 28px 24px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 45%),
-              var(--glass-2);
-  border: 1px solid var(--stroke-strong);
-  clip-path: var(--clip);
-  box-shadow: 0 0 70px rgba(0, 255, 204, 0.12), var(--shadow);
-  text-align: center;
-}
-
-/* HUD brackets */
-.overlay-card::before,
-.overlay-card::after {
-  content: "";
-  position: absolute;
-  width: 24px;
-  height: 24px;
-  border: 2px solid hsla(var(--hue) 100% 65% / 0.6);
-  pointer-events: none;
-}
-.overlay-card::before { top: 10px; left: 10px; border-right: 0; border-bottom: 0; }
-.overlay-card::after  { bottom: 10px; right: 10px; border-left: 0; border-top: 0; }
-
-.title {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-size: 24px;
-  font-weight: 900;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  text-shadow: var(--bloom);
-  position: relative;
-  display: inline-block;
-}
-
-/* Chromatic glitch on hover (no JS) */
-.title::before,
-.title::after {
-  content: attr(data-text);
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-.title:hover::before {
-  opacity: 0.8;
-  transform: translateX(-2px);
-  color: rgba(255, 0, 85, 0.8);
-  clip-path: polygon(0 0, 100% 0, 100% 40%, 0 40%);
-}
-.title:hover::after {
-  opacity: 0.8;
-  transform: translateX(2px);
-  color: rgba(56, 189, 248, 0.8);
-  clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
-}
-
-.desc {
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.kbd {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.kbd span {
-  padding: 5px 10px;
-  border: 1px solid var(--stroke);
-  background: rgba(0, 255, 204, 0.05);
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--accent);
-}
-
-/* =========================
-   Buttons (tactile + glow)
-   ========================= */
+/* =========================================
+   Buttons & Interactive Elements
+   ========================================= */
 button {
-  all: unset;
-  pointer-events: auto;
+  appearance: none;
+  border: none;
   cursor: pointer;
-
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-
-  padding: 12px 18px;
-  font-family: var(--font-mono);
-  font-weight: 900;
-  font-size: 12px;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(0, 255, 204, 0.07);
+  border: 1px solid var(--stroke-bright);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% 100%,
+    10px 100%,
+    0 calc(100% - 10px)
+  );
+  font-family: var(--font-code);
+  font-weight: 800;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-
-  color: var(--ink);
-  background: rgba(0, 255, 204, 0.07);
-  border: 1px solid var(--stroke-strong);
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
-  box-shadow: 0 0 0 rgba(0,0,0,0);
-  transform: translateZ(0);
-  transition: transform 0.12s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  color: var(--text-main);
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
 button:hover {
-  background: rgba(0, 255, 204, 0.18);
-  border-color: hsla(var(--hue) 100% 70% / 0.9);
-  box-shadow: var(--bloom);
+  background: rgba(0, 255, 204, 0.2);
+  border-color: var(--primary);
+  box-shadow: var(--bloom-glow);
 }
 
 button:active {
-  transform: translateY(1px) scale(0.985);
-  background: hsla(var(--hue) 100% 55% / 0.9);
-  color: #051018;
+  transform: translateY(1px);
+  background: var(--primary);
+  color: #02040a;
 }
 
 button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--primary);
   outline-offset: 3px;
 }
 
-.upgrade-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 16px 0;
-}
-.upgrade-btn {
-  width: 100%;
-  justify-content: space-between;
-  text-align: left;
-}
-
-/* =========================
-   Responsive + container queries
-   ========================= */
-@container (max-width: 440px) {
-  .panel { min-width: 0; }
-}
-
-/* Fallback: normal media queries */
-@media (max-width: 600px) {
-  .hud { inset-block-start: 10px; inset-inline: 10px; gap: 10px; }
-  .panel { min-width: 0; padding: 10px 12px 14px; }
-  .title { font-size: 20px; }
-}
-
-/* Accessibility */
+/* =========================================
+   Reduced Motion (A11y)
+   ========================================= */
 @media (prefers-reduced-motion: reduce) {
-  #scanlines, #vignette,
-  .bar::after { animation: none !important; }
-  * { transition-duration: 0.01ms !important; }
+  .bar.danger > i {
+    animation: none;
+  }
+  button {
+    transition: none;
+  }
 }
