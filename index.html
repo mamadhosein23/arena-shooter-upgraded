@@ -1,119 +1,240 @@
 /**
- * Ultra-Performance Continuous Collision Detection (CCD) Move & Slide
- * Optimized for 2D platforms, top-down games, and high-velocity entities.
- * 
- * @param {Object} entity - Mutable position container { x, y }
- * @param {number} dx - Target delta X
- * @param {number} dy - Target delta Y
- * @param {number} radius - Bounding circle radius
- * @param {Function} castCircle - (x, y, r, dx, dy) => { t, nx, ny } | null
- * @param {Object} [opts] - Configuration options
- * @returns {Object} Result metrics { x, y, hitCount, isStuck }
+ * Move & slide a circular entity using swept-circle CCD.
+ *
+ * castCircle(x, y, radius, dx, dy) must return:
+ *   null
+ *   or { t: number in [0, 1], nx: number, ny: number }
+ *
+ * The hit normal must point OUT of the obstacle, toward the entity.
+ *
+ * Options:
+ *   maxIters       Maximum CCD queries per call. Default: 6
+ *   skin           Gap maintained before impact. Default: 0.005
+ *   minMove        Remaining moves below this length are ignored. Default: 1e-6
+ *   friction       Tangential movement removed per impact, [0, 1]. Default: 0
+ *   restitution    Bounce amount, [0, 1]. Default: 0
+ *   collectHits    Include per-hit data in the result. Default: false
+ *   normalsBuffer  Optional reusable Float64Array, length >= maxIters * 2
+ *
+ * Note: this handles motion, not deep initial overlaps. Depenetration requires
+ * penetration-depth information from the collision API.
  */
-function moveEntityCCDPro(entity, dx, dy, radius, castCircle, opts = {}) {
-  const maxIters = opts.maxIters ?? 6;
-  const skin = opts.skin ?? 0.002;
-  const minMove = opts.minMove ?? 1e-6;
-  const bounce = opts.bounce ?? 0.0;
-  const friction = opts.friction ?? 0.0;
-
-  let vx = dx;
-  let vy = dy;
-  let hitCount = 0;
-  let isStuck = false;
-
-  // Static buffers to avoid GC allocations during high-frequency loops
-  let n1x = 0, n1y = 0;
-  let n2x = 0, n2y = 0;
-  let planeCount = 0;
-
-  for (let iter = 0; iter < maxIters; iter++) {
-    const vLenSq = vx * vx + vy * vy;
-    if (vLenSq < minMove * minMove) break;
-
-    const vLen = Math.sqrt(vLenSq);
-    const hit = castCircle(entity.x, entity.y, radius, vx, vy);
-
-    if (!hit) {
-      entity.x += vx;
-      entity.y += vy;
-      break;
-    }
-
-    hitCount++;
-    const t = Math.max(0, Math.min(1, hit.t));
-    
-    // Move up to the impact point minus skin margin
-    const travel = Math.max(0, t * vLen - skin);
-    const stepRatio = travel / vLen;
-    
-    entity.x += vx * stepRatio;
-    entity.y += vy * stepRatio;
-
-    // Remaining velocity vector scaling
-    const remRatio = Math.max(0, 1.0 - t);
-    let rx = vx * remRatio;
-    let ry = vy * remRatio;
-
-    const nx = hit.nx;
-    const ny = hit.ny;
-
-    // Add plane to constraint solver
-    if (planeCount === 0) {
-      n1x = nx; n1y = ny;
-      planeCount = 1;
-    } else if (planeCount === 1) {
-      // Check if it's a completely different plane (Wedge / Corner)
-      const dot = n1x * nx + n1y * ny;
-      if (dot < 0.99) {
-        n2x = nx; n2y = ny;
-        planeCount = 2;
-      }
-    } else {
-      // Stuck in a tight corner / multi-plane intersection
-      isStuck = true;
-      vx = 0;
-      vy = 0;
-      break;
-    }
-
-    // Multi-plane slide projection
-    if (planeCount === 1) {
-      const into = rx * n1x + ry * n1y;
-      if (into < 0) {
-        rx = (rx - into * n1x) * (1.0 - friction) - (into * n1x * bounce);
-        ry = (ry - into * n1y) * (1.0 - friction) - (into * n1y * bounce);
-      } else {
-        rx = 0; ry = 0;
-      }
-    } else if (planeCount === 2) {
-      // Intersection line direction (Cross product with Z-axis in 2D)
-      // For 2D planes, solving velocity along the intersection of two normals:
-      const det = n1x * n2y - n1y * n2x;
-      if (Math.abs(det) < 1e-5) {
-        // Parallel or identical planes, collapse movement
-        rx = 0; ry = 0;
-      } else {
-        // Project remaining velocity onto the crease line vector
-        const d1 = rx * n1x + ry * n1y;
-        const d2 = rx * n2x + ry * n2y;
-        
-        if (d1 < 0) { rx -= d1 * n1x; ry -= d1 * n1y; }
-        if (d2 < 0) { rx -= d2 * n2x; ry -= d2 * n2y; }
-
-        // Final double-check along the crease edge
-        const edgeX = n1y * n2y - (-n1x) * (-n2x); // simplified edge check
-        const edgeDot = rx * n1x + ry * n1y;
-        if (edgeDot < 0) {
-          rx = 0; 
-          ry = 0;
-        }
-      }
-    }
-
-    vx = rx;
-    vy = ry;
+function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
+  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
+    throw new TypeError("entity must have finite x and y");
+  }
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    throw new TypeError("dx and dy must be finite");
+  }
+  if (!Number.isFinite(radius) || radius < 0) {
+    throw new RangeError("radius must be a finite non-negative number");
+  }
+  if (typeof castCircle !== "function") {
+    throw new TypeError("castCircle must be a function");
   }
 
-  return { x: entity.x, y: entity.y, hitCount, isStuck };
+  const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 6));
+  const skin = Math.max(0, opts.skin ?? 0.005);
+  const minMove = Math.max(0, opts.minMove ?? 1e-6);
+  const minMoveSq = minMove * minMove;
+  const friction = clamp01(opts.friction ?? 0);
+  const restitution = clamp01(opts.restitution ?? 0);
+  const collectHits = opts.collectHits === true;
+
+  const normals = opts.normalsBuffer ?? new Float64Array(maxIters * 2);
+  if (!(normals instanceof Float64Array) || normals.length < maxIters * 2) {
+    throw new RangeError("normalsBuffer must be a Float64Array of length >= maxIters * 2");
+  }
+
+  const startX = entity.x;
+  const startY = entity.y;
+  const hits = collectHits ? [] : null;
+
+  let remX = dx;
+  let remY = dy;
+  let normalCount = 0;
+  let hitCount = 0;
+  let iterations = 0;
+
+  for (let iter = 0; iter < maxIters; iter++) {
+    iterations = iter + 1;
+
+    const distSq = remX * remX + remY * remY;
+    if (distSq <= minMoveSq) {
+      remX = 0;
+      remY = 0;
+      break;
+    }
+
+    const dist = Math.sqrt(distSq);
+    const hit = castCircle(entity.x, entity.y, radius, remX, remY);
+
+    if (!hit) {
+      entity.x += remX;
+      entity.y += remY;
+      remX = 0;
+      remY = 0;
+      break;
+    }
+
+    if (
+      !Number.isFinite(hit.t) ||
+      !Number.isFinite(hit.nx) ||
+      !Number.isFinite(hit.ny)
+    ) {
+      throw new TypeError("castCircle returned an invalid hit");
+    }
+
+    const t = Math.max(0, Math.min(1, hit.t));
+    const normalLength = Math.hypot(hit.nx, hit.ny);
+
+    if (normalLength < 1e-12) {
+      throw new TypeError("collision normal must have non-zero length");
+    }
+
+    const nx = hit.nx / normalLength;
+    const ny = hit.ny / normalLength;
+
+    hitCount++;
+
+    // Advance to just before impact, leaving the requested skin gap.
+    const safeT = Math.max(0, t - skin / dist);
+    entity.x += remX * safeT;
+    entity.y += remY * safeT;
+
+    // Remaining displacement after the actual impact time.
+    let nextX = remX * (1 - t);
+    let nextY = remY * (1 - t);
+
+    // Add this collision plane unless an equivalent normal is already present.
+    let duplicate = false;
+    for (let i = 0; i < normalCount; i++) {
+      const px = normals[i * 2];
+      const py = normals[i * 2 + 1];
+
+      if (px * nx + py * ny > 1 - 1e-6) {
+        duplicate = true;
+        break;
+      }
+    }
+
+    if (!duplicate && normalCount < maxIters) {
+      normals[normalCount * 2] = nx;
+      normals[normalCount * 2 + 1] = ny;
+      normalCount++;
+    }
+
+    // Apply restitution and tangential friction for motion into this surface.
+    const normalSpeed = nextX * nx + nextY * ny;
+
+    if (normalSpeed < 0) {
+      const tangentX = nextX - normalSpeed * nx;
+      const tangentY = nextY - normalSpeed * ny;
+
+      nextX =
+        tangentX * (1 - friction) -
+        normalSpeed * restitution * nx;
+
+      nextY =
+        tangentY * (1 - friction) -
+        normalSpeed * restitution * ny;
+    }
+
+    // Project onto the feasible cone of all accumulated contact planes.
+    // Constraints are n·move >= 0. This avoids order-dependent sequential
+    // projections when two or more surfaces are active.
+    const projected = projectToContactCone(
+      nextX,
+      nextY,
+      normals,
+      normalCount,
+      minMove,
+    );
+
+    remX = projected[0];
+    remY = projected[1];
+
+    if (collectHits) {
+      hits.push({ t, nx, ny });
+    }
+  }
+
+  const result = {
+    x: entity.x,
+    y: entity.y,
+    movedX: entity.x - startX,
+    movedY: entity.y - startY,
+    hitCount,
+    iterations,
+    remainingX: remX,
+    remainingY: remY,
+    truncated: remX * remX + remY * remY > minMoveSq,
+  };
+
+  if (collectHits) result.collisions = hits;
+  return result;
+}
+
+function projectToContactCone(vx, vy, normals, count, epsilon) {
+  // If the requested vector already satisfies every contact constraint,
+  // it is already the closest valid vector.
+  let feasible = true;
+
+  for (let i = 0; i < count; i++) {
+    const nx = normals[i * 2];
+    const ny = normals[i * 2 + 1];
+
+    if (vx * nx + vy * ny < -epsilon) {
+      feasible = false;
+      break;
+    }
+  }
+
+  if (feasible) return [vx, vy];
+
+  // Zero movement always satisfies all unilateral contact constraints.
+  let bestX = 0;
+  let bestY = 0;
+  let bestError = vx * vx + vy * vy;
+
+  // The closest point in 2D is either zero or a projection onto one
+  // constraint boundary, provided that candidate satisfies every constraint.
+  for (let i = 0; i < count; i++) {
+    const nx = normals[i * 2];
+    const ny = normals[i * 2 + 1];
+    const into = vx * nx + vy * ny;
+
+    const candidateX = vx - into * nx;
+    const candidateY = vy - into * ny;
+
+    let candidateFeasible = true;
+
+    for (let j = 0; j < count; j++) {
+      const jx = normals[j * 2];
+      const jy = normals[j * 2 + 1];
+
+      if (candidateX * jx + candidateY * jy < -epsilon) {
+        candidateFeasible = false;
+        break;
+      }
+    }
+
+    if (!candidateFeasible) continue;
+
+    const errorX = candidateX - vx;
+    const errorY = candidateY - vy;
+    const error = errorX * errorX + errorY * errorY;
+
+    if (error < bestError) {
+      bestError = error;
+      bestX = candidateX;
+      bestY = candidateY;
+    }
+  }
+
+  return [bestX, bestY];
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
 }
