@@ -1,57 +1,28 @@
-🚀 2D Arena Shooter
+# <p align="center">⚡ ARENA SHOOTER</p>
 
+<p align="center">
+  <strong>A high-performance, deterministic 2D top-down arena shooter built with pure Vanilla JavaScript and HTML5 Canvas.</strong>
+</p>
 
+<p align="center">
+  <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"><img src="https://img.shields.io/badge/Language-Vanilla%20ES6%2B-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" alt="JavaScript" /></a>
+  <a href="https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API"><img src="https://img.shields.io/badge/Graphics-Canvas%202D%20Context-E34F26?style=for-the-badge&logo=html5&logoColor=white" alt="Canvas" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-00F0FF?style=for-the-badge" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Dependencies-Zero-brightgreen?style=for-the-badge" alt="Zero Dependencies" />
+</p>
 
+<p align="center">
+  <a href="#-overview">Overview</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-controls">Controls</a> •
+  <a href="#-technical-deep-dive">Technical Details</a> •
+  <a href="#-quickstart">Quickstart</a>
+</p>
 
+---
 
+## 🧭 Overview
 
-A fast-paced, top-down arena shooter built with Vanilla JavaScript and the HTML5 Canvas API. Fight through enemy waves, switch between weapons, and choose upgrades as you progress.
+**Arena Shooter** is an arcade-style, top-down survival game running natively in the browser without frameworks, bundlers, or third-party engines. 
 
-The game requires no build tools, package managers, or runtime libraries. Optional web fonts may be loaded by the stylesheet; system fonts are used as fallbacks.
-
-🎮 Features
-Combat and weapons
-Pistol: Reliable single-shot weapon with unlimited ammo.
-Shotgun: Fires six projectiles in a spread.
-Laser: Hitscan attack with line-based target detection and visual effects.
-Rocket Launcher: Fires explosive projectiles that deal area-of-effect damage.
-Enemy types
-Normal: Pursues the player at a standard pace.
-Fast: Moves quickly but has less health.
-Tank: Has a large health pool and deals more collision damage, but moves slowly.
-Bomber: Charges the player and detonates at close range.
-Shooter: Keeps its distance and fires projectiles at the player.
-Waves and upgrades
-Survive each wave to choose from three randomized upgrades, including increased max health, movement speed, fire rate, damage, bullet velocity, lifesteal chance, and reduced cooldowns.
-
-Visual effects and interface
-Screen shake, particle bursts, bullet trails, shockwave rings, and hit flashes.
-A futuristic HUD with progress bars, status indicators, and themeable accent colors.
-High scores saved locally in the browser using localStorage.
-🕹 Controls
-
-Action	Input
-Move	W, A, S, D
-Aim	Mouse cursor
-Fire	Hold left mouse button
-Select weapon	1, 2, 3, 4
-Choose an upgrade	1, 2, 3 or click an upgrade card
-Pause / resume	Escape
-Restart after game over	R or click the game-over screen
-🛠 Technical Overview
-The game uses a lightweight browser-based architecture:
-
-Canvas and viewport: Resizes the canvas to fit the viewport and accounts for display pixel ratio.
-Input handling: Tracks keyboard state and mouse position for movement, aiming, and firing.
-Collision detection:
-Circle-to-circle checks use squared distances to avoid unnecessary square-root calculations.
-Laser attacks use line-segment intersection checks.
-Entity lifecycle: Removes expired projectiles and visual effects to keep active game objects manageable.
-Game loop: Uses requestAnimationFrame and elapsed time to update and render the game.
-🚀 Getting Started
-No installation or build step is required.
-
-bash
-git clone https://github.com/mamadhosein23/arena-shooter-upgraded.git
-cd arena-shooter-upgraded
-Open index.html in a modern browser to play.
+The project demonstrates low-level browser game development, featuring continuous collision detection, frame-independent movement physics, custom GPU-friendly HUD composition, and low-allocation entity management.
