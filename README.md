@@ -1,66 +1,57 @@
-# 🚀 2D Arena Shooter
+🚀 2D Arena Shooter
 
-[![JavaScript](https://img.shields.io/badge/Language-Vanilla%20JS-F7DF1E?style=flat-square&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![HTML5 Canvas](https://img.shields.io/badge/Graphics-Canvas%20API-E34F26?style=flat-square&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
-A fast-paced, top-down 2D Arena Shooter built strictly with **Vanilla JavaScript** and the **HTML5 Canvas API**—zero external dependencies, build tools, or runtime libraries.
 
----
 
-## 🎮 Core Features & Mechanics
 
-- **Delta-Time Driven Game Loop:** Decoupled physics update and rendering cycles utilizing `requestAnimationFrame`, ensuring consistent behavior regardless of monitor refresh rates.
-- **Weapon Arsenal:**
-  - `[1] Pistol`: Standard single-shot projectile weapon with infinite ammo.
-  - `[2] Shotgun`: Multi-pellet spread attack (6 projectiles per shot).
-  - `[3] Laser`: Instantaneous hitscan line-intersection raycasting with visual glow effects.
-  - `[4] Rocket Launcher`: High-damage explosive projectile with Area-of-Effect (AoE) splash damage.
-- **Enemy AI System:**
-  - `Normal`: Standard pursuit behavior.
-  - `Fast`: High mobility, low health pool.
-  - `Tank`: Heavy health pool, high collision damage, slower movement.
-  - `Bomber`: Charges the player and self-destructs upon proximity.
-  - `Shooter`: Maintains distance and fires targeted projectiles.
-- **Roguelite Wave & Upgrade Loop:** Cleared waves present three randomized stat upgrades (Max HP, Movement Speed, Fire Rate, Damage Multiplier, Bullet Velocity, Lifesteal chance, Cooldown Reduction).
-- **VFX & Juice Engine:** Dynamic screen shake, decaying particle bursts, bullet trails, radial shockwave rings, and hit-flash states.
-- **State Persistence:** Persistent high-score tracking using the browser's `localStorage`.
 
----
+A fast-paced, top-down arena shooter built with Vanilla JavaScript and the HTML5 Canvas API. Fight through enemy waves, switch between weapons, and choose upgrades as you progress.
 
-## 🕹 Controls
+The game requires no build tools, package managers, or runtime libraries. Optional web fonts may be loaded by the stylesheet; system fonts are used as fallbacks.
 
-| Action | Key / Input |
-| :--- | :--- |
-| **Movement** | `W`, `A`, `S`, `D` |
-| **Aim** | `Mouse Cursor` |
-| **Fire** | `Left Click` (Hold to auto-fire) |
-| **Select Weapon** | `1`, `2`, `3`, `4` |
-| **Choose Upgrade** | `1`, `2`, `3` or `Mouse Click` on card |
-| **Pause / Resume** | `Escape` |
-| **Restart Game** | `R` or `Left Click` (on Game Over screen) |
+🎮 Features
+Combat and weapons
+Pistol: Reliable single-shot weapon with unlimited ammo.
+Shotgun: Fires six projectiles in a spread.
+Laser: Hitscan attack with line-based target detection and visual effects.
+Rocket Launcher: Fires explosive projectiles that deal area-of-effect damage.
+Enemy types
+Normal: Pursues the player at a standard pace.
+Fast: Moves quickly but has less health.
+Tank: Has a large health pool and deals more collision damage, but moves slowly.
+Bomber: Charges the player and detonates at close range.
+Shooter: Keeps its distance and fires projectiles at the player.
+Waves and upgrades
+Survive each wave to choose from three randomized upgrades, including increased max health, movement speed, fire rate, damage, bullet velocity, lifesteal chance, and reduced cooldowns.
 
----
+Visual effects and interface
+Screen shake, particle bursts, bullet trails, shockwave rings, and hit flashes.
+A futuristic HUD with progress bars, status indicators, and themeable accent colors.
+High scores saved locally in the browser using localStorage.
+🕹 Controls
 
-## 🛠 Technical Architecture
+Action	Input
+Move	W, A, S, D
+Aim	Mouse cursor
+Fire	Hold left mouse button
+Select weapon	1, 2, 3, 4
+Choose an upgrade	1, 2, 3 or click an upgrade card
+Pause / resume	Escape
+Restart after game over	R or click the game-over screen
+🛠 Technical Overview
+The game uses a lightweight browser-based architecture:
 
-The engine is built around a decoupled architecture focused on performance:
+Canvas and viewport: Resizes the canvas to fit the viewport and accounts for display pixel ratio.
+Input handling: Tracks keyboard state and mouse position for movement, aiming, and firing.
+Collision detection:
+Circle-to-circle checks use squared distances to avoid unnecessary square-root calculations.
+Laser attacks use line-segment intersection checks.
+Entity lifecycle: Removes expired projectiles and visual effects to keep active game objects manageable.
+Game loop: Uses requestAnimationFrame and elapsed time to update and render the game.
+🚀 Getting Started
+No installation or build step is required.
 
-1. **Setup & Viewport Management:** Dynamic canvas resizing, DPI scaling, and coordinate normalization.
-2. **Input State Manager:** Discrete tracking of active keymaps and continuous mouse coordinate polling.
-3. **Collision Detection Math:**
-   - *Circle-to-Circle Collision:* Distance vector calculations using squared Euclidean norms to eliminate costly square root calls.
-   - *Raycast/Segment Collision:* Point-to-line segment projection for instant laser hits.
-4. **Entity Lifecycle & Memory Cleanup:** Array compaction and memory garbage mitigation for particles, lasers, floaters, and expired bullet entities.
-
----
-
-## 🚀 Getting Started
-
-No build tools, bundlers, or package managers required.
-
-1. **Clone the repository:**
-```bash
-   git clone https://github.com/mamadhosein23/arena-shooter-upgraded.git
-   cd arena-shooter-upgraded
-   
+bash
+git clone https://github.com/mamadhosein23/arena-shooter-upgraded.git
+cd arena-shooter-upgraded
+Open index.html in a modern browser to play.
