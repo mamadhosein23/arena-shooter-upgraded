@@ -15,8 +15,9 @@
   <a href="#-overview">Overview</a> •
   <a href="#-features">Features</a> •
   <a href="#-controls">Controls</a> •
-  <a href="#-technical-deep-dive">Technical Details</a> •
-  <a href="#-quickstart">Quickstart</a>
+  <a href="#-technical-architecture">Architecture</a> •
+  <a href="#-getting-started">Getting Started</a> •
+  <a href="#-license">License</a>
 </p>
 
 ---
