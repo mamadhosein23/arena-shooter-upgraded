@@ -1,23 +1,6 @@
 /**
  * Move & slide a circular entity using swept-circle CCD.
- *
- * castCircle(x, y, radius, dx, dy) must return:
- *   null
- *   or { t: number in [0, 1], nx: number, ny: number }
- *
- * The hit normal must point OUT of the obstacle, toward the entity.
- *
- * Options:
- *   maxIters       Maximum CCD queries per call. Default: 6
- *   skin           Gap maintained before impact. Default: 0.005
- *   minMove        Remaining moves below this length are ignored. Default: 1e-6
- *   friction       Tangential movement removed per impact, [0, 1]. Default: 0
- *   restitution    Bounce amount, [0, 1]. Default: 0
- *   collectHits    Include per-hit data in the result. Default: false
- *   normalsBuffer  Optional reusable Float64Array, length >= maxIters * 2
- *
- * Note: this handles motion, not deep initial overlaps. Depenetration requires
- * penetration-depth information from the collision API.
+ * Reference: Valve Source Engine `ClipVelocity` & Quake-style kinematic sweep/slide.
  */
 function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
   if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
@@ -97,22 +80,24 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
 
     hitCount++;
 
-    // Advance to just before impact, leaving the requested skin gap.
-    const safeT = Math.max(0, t - skin / dist);
+    // اصلاح ۱: پیشروی تا قبل از برخورد بر اساس skin
+    const skinRatio = skin / dist;
+    const safeT = Math.max(0, Math.min(t, t - skinRatio));
+    
     entity.x += remX * safeT;
     entity.y += remY * safeT;
 
-    // Remaining displacement after the actual impact time.
-    let nextX = remX * (1 - t);
-    let nextY = remY * (1 - t);
+    // اصلاح ۲: همگام‌سازی جابه‌جایی باقیمانده با مسافت طی‌شده
+    const remainingFraction = 1 - safeT;
+    let nextX = remX * remainingFraction;
+    let nextY = remY * remainingFraction;
 
-    // Add this collision plane unless an equivalent normal is already present.
+    // افزودن نرمال با فیلتر زوایای بسیار نزدیک
     let duplicate = false;
     for (let i = 0; i < normalCount; i++) {
       const px = normals[i * 2];
       const py = normals[i * 2 + 1];
-
-      if (px * nx + py * ny > 1 - 1e-6) {
+      if (px * nx + py * ny > 0.999) {
         duplicate = true;
         break;
       }
@@ -124,31 +109,24 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       normalCount++;
     }
 
-    // Apply restitution and tangential friction for motion into this surface.
+    // اعمال اصطکاک مماسی و ضریب بازگشت (Bounce)
     const normalSpeed = nextX * nx + nextY * ny;
 
     if (normalSpeed < 0) {
       const tangentX = nextX - normalSpeed * nx;
       const tangentY = nextY - normalSpeed * ny;
 
-      nextX =
-        tangentX * (1 - friction) -
-        normalSpeed * restitution * nx;
-
-      nextY =
-        tangentY * (1 - friction) -
-        normalSpeed * restitution * ny;
+      nextX = tangentX * (1 - friction) - normalSpeed * restitution * nx;
+      nextY = tangentY * (1 - friction) - normalSpeed * restitution * ny;
     }
 
-    // Project onto the feasible cone of all accumulated contact planes.
-    // Constraints are n·move >= 0. This avoids order-dependent sequential
-    // projections when two or more surfaces are active.
+    // حل تداخل چندوجهی (Projecting onto feasible sliding cone)
     const projected = projectToContactCone(
       nextX,
       nextY,
       normals,
       normalCount,
-      minMove,
+      minMove
     );
 
     remX = projected[0];
@@ -156,6 +134,13 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
 
     if (collectHits) {
       hits.push({ t, nx, ny });
+    }
+
+    // توقف در صورت صفر شدن بردار حرکت ناشی از گیر افتادن در گوشه
+    if (remX * remX + remY * remY <= minMoveSq) {
+      remX = 0;
+      remY = 0;
+      break;
     }
   }
 
@@ -176,14 +161,11 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
 }
 
 function projectToContactCone(vx, vy, normals, count, epsilon) {
-  // If the requested vector already satisfies every contact constraint,
-  // it is already the closest valid vector.
   let feasible = true;
 
   for (let i = 0; i < count; i++) {
     const nx = normals[i * 2];
     const ny = normals[i * 2 + 1];
-
     if (vx * nx + vy * ny < -epsilon) {
       feasible = false;
       break;
@@ -192,46 +174,42 @@ function projectToContactCone(vx, vy, normals, count, epsilon) {
 
   if (feasible) return [vx, vy];
 
-  // Zero movement always satisfies all unilateral contact constraints.
   let bestX = 0;
   let bestY = 0;
-  let bestError = vx * vx + vy * vy;
+  let bestDistSq = 0; // به دنبال بیشترین طول حرکت مجاز در راستای درست
 
-  // The closest point in 2D is either zero or a projection onto one
-  // constraint boundary, provided that candidate satisfies every constraint.
   for (let i = 0; i < count; i++) {
     const nx = normals[i * 2];
     const ny = normals[i * 2 + 1];
     const into = vx * nx + vy * ny;
 
+    // تصویر روی سطح تماس i
     const candidateX = vx - into * nx;
     const candidateY = vy - into * ny;
 
     let candidateFeasible = true;
-
     for (let j = 0; j < count; j++) {
+      if (i === j) continue;
       const jx = normals[j * 2];
       const jy = normals[j * 2 + 1];
-
       if (candidateX * jx + candidateY * jy < -epsilon) {
         candidateFeasible = false;
         break;
       }
     }
 
-    if (!candidateFeasible) continue;
-
-    const errorX = candidateX - vx;
-    const errorY = candidateY - vy;
-    const error = errorX * errorX + errorY * errorY;
-
-    if (error < bestError) {
-      bestError = error;
-      bestX = candidateX;
-      bestY = candidateY;
+    if (candidateFeasible) {
+      const magSq = candidateX * candidateX + candidateY * candidateY;
+      if (magSq > bestDistSq) {
+        bestDistSq = magSq;
+        bestX = candidateX;
+        bestY = candidateY;
+      }
     }
   }
 
+  // اصلاح ۳: بررسی تقاطع گوشه‌ها (V-shape Corner / Crease Slide)
+  // در صورتی که هیچ خط مماسی منفردی مجاز نبود، بردار حرکت در راستای تلاقی دو صفحه (در دوبعدی: 0) است
   return [bestX, bestY];
 }
 
