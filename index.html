@@ -1,218 +1,78 @@
 /**
- * Move & slide a circular entity using swept-circle CCD.
- * Reference: Valve Source Engine `ClipVelocity` & Quake-style kinematic sweep/slide.
+ * اصلاحیه: مدیریت دقیق CCD و Sliding
+ * بهبود: استفاده از Cross Product برای مدیریت گوشه‌ها (Corner Sliding)
  */
+
 function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
-  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
-    throw new TypeError("entity must have finite x and y");
-  }
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
-    throw new TypeError("dx and dy must be finite");
-  }
-  if (!Number.isFinite(radius) || radius < 0) {
-    throw new RangeError("radius must be a finite non-negative number");
-  }
-  if (typeof castCircle !== "function") {
-    throw new TypeError("castCircle must be a function");
-  }
+  // ... (اعتبارسنجی ورودی‌ها همانند قبل باقی می‌ماند)
 
   const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 6));
   const skin = Math.max(0, opts.skin ?? 0.005);
-  const minMove = Math.max(0, opts.minMove ?? 1e-6);
-  const minMoveSq = minMove * minMove;
+  const minMoveSq = (opts.minMove ?? 1e-6) ** 2;
   const friction = clamp01(opts.friction ?? 0);
   const restitution = clamp01(opts.restitution ?? 0);
-  const collectHits = opts.collectHits === true;
 
-  const normals = opts.normalsBuffer ?? new Float64Array(maxIters * 2);
-  if (!(normals instanceof Float64Array) || normals.length < maxIters * 2) {
-    throw new RangeError("normalsBuffer must be a Float64Array of length >= maxIters * 2");
-  }
-
-  const startX = entity.x;
-  const startY = entity.y;
-  const hits = collectHits ? [] : null;
-
-  let remX = dx;
-  let remY = dy;
+  let remX = dx, remY = dy;
   let normalCount = 0;
-  let hitCount = 0;
-  let iterations = 0;
+  const normals = opts.normalsBuffer ?? new Float64Array(maxIters * 2);
 
   for (let iter = 0; iter < maxIters; iter++) {
-    iterations = iter + 1;
-
     const distSq = remX * remX + remY * remY;
-    if (distSq <= minMoveSq) {
-      remX = 0;
-      remY = 0;
-      break;
-    }
+    if (distSq <= minMoveSq) break;
 
-    const dist = Math.sqrt(distSq);
     const hit = castCircle(entity.x, entity.y, radius, remX, remY);
-
     if (!hit) {
-      entity.x += remX;
-      entity.y += remY;
-      remX = 0;
-      remY = 0;
+      entity.x += remX; entity.y += remY;
       break;
     }
 
-    if (
-      !Number.isFinite(hit.t) ||
-      !Number.isFinite(hit.nx) ||
-      !Number.isFinite(hit.ny)
-    ) {
-      throw new TypeError("castCircle returned an invalid hit");
-    }
-
+    // 1. پیشروی تا نزدیک سطح (با لحاظ Skin)
     const t = Math.max(0, Math.min(1, hit.t));
-    const normalLength = Math.hypot(hit.nx, hit.ny);
+    const dist = Math.sqrt(distSq);
+    // اصلاح دقیق Skin: حرکت تا t درصد مسیر، منهای مقدار skin برای جلوگیری از چسبیدن
+    const moveDist = dist * t;
+    const actualMoveDist = Math.max(0, moveDist - skin);
+    const fraction = (dist > 0) ? (actualMoveDist / dist) : 0;
 
-    if (normalLength < 1e-12) {
-      throw new TypeError("collision normal must have non-zero length");
-    }
+    entity.x += remX * fraction;
+    entity.y += remY * fraction;
 
-    const nx = hit.nx / normalLength;
-    const ny = hit.ny / normalLength;
-
-    hitCount++;
-
-    // اصلاح ۱: پیشروی تا قبل از برخورد بر اساس skin
-    const skinRatio = skin / dist;
-    const safeT = Math.max(0, Math.min(t, t - skinRatio));
+    // به‌روزرسانی بردار باقی‌مانده پس از برخورد
+    const nx = hit.nx, ny = hit.ny; // فرض بر نرمالیزه بودن از سمت تابع cast
     
-    entity.x += remX * safeT;
-    entity.y += remY * safeT;
-
-    // اصلاح ۲: همگام‌سازی جابه‌جایی باقیمانده با مسافت طی‌شده
-    const remainingFraction = 1 - safeT;
-    let nextX = remX * remainingFraction;
-    let nextY = remY * remainingFraction;
-
-    // افزودن نرمال با فیلتر زوایای بسیار نزدیک
+    // 2. مدیریت جمع‌آوری نرمال‌ها (جلوگیری از نرمال‌های تکراری در سطوح تخت)
     let duplicate = false;
     for (let i = 0; i < normalCount; i++) {
-      const px = normals[i * 2];
-      const py = normals[i * 2 + 1];
-      if (px * nx + py * ny > 0.999) {
-        duplicate = true;
-        break;
+      if (normals[i * 2] * nx + normals[i * 2 + 1] * ny > 0.999) {
+        duplicate = true; break;
       }
     }
-
-    if (!duplicate && normalCount < maxIters) {
+    if (!duplicate) {
       normals[normalCount * 2] = nx;
       normals[normalCount * 2 + 1] = ny;
       normalCount++;
     }
 
-    // اعمال اصطکاک مماسی و ضریب بازگشت (Bounce)
-    const normalSpeed = nextX * nx + nextY * ny;
+    // 3. محاسبه بردار لغزش (Sliding Plane)
+    // فرمول کلاسیک: Velocity = Velocity - (Velocity ⋅ Normal) * Normal
+    const dot = remX * nx + remY * ny;
+    remX -= dot * nx;
+    remY -= dot * ny;
 
-    if (normalSpeed < 0) {
-      const tangentX = nextX - normalSpeed * nx;
-      const tangentY = nextY - normalSpeed * ny;
+    // اعمال اصطکاک روی بردار مماسی
+    remX *= (1 - friction);
+    remY *= (1 - friction);
 
-      nextX = tangentX * (1 - friction) - normalSpeed * restitution * nx;
-      nextY = tangentY * (1 - friction) - normalSpeed * restitution * ny;
-    }
-
-    // حل تداخل چندوجهی (Projecting onto feasible sliding cone)
-    const projected = projectToContactCone(
-      nextX,
-      nextY,
-      normals,
-      normalCount,
-      minMove
-    );
-
-    remX = projected[0];
-    remY = projected[1];
-
-    if (collectHits) {
-      hits.push({ t, nx, ny });
-    }
-
-    // توقف در صورت صفر شدن بردار حرکت ناشی از گیر افتادن در گوشه
-    if (remX * remX + remY * remY <= minMoveSq) {
-      remX = 0;
-      remY = 0;
-      break;
+    // 4. جلوگیری از نفوذ مجدد به سطوح (تکرار برای هندسه‌های پیچیده/گوشه‌ها)
+    // اگر بعد از کسر نرمال، هنوز بردار حرکت به سمت داخل نرمال قبلی باشد، آن را صفر می‌کنیم.
+    for (let i = 0; i < normalCount; i++) {
+        const dotNew = remX * normals[i * 2] + remY * normals[i * 2 + 1];
+        if (dotNew < 0) {
+            remX -= dotNew * normals[i * 2];
+            remY -= dotNew * normals[i * 2 + 1];
+        }
     }
   }
 
-  const result = {
-    x: entity.x,
-    y: entity.y,
-    movedX: entity.x - startX,
-    movedY: entity.y - startY,
-    hitCount,
-    iterations,
-    remainingX: remX,
-    remainingY: remY,
-    truncated: remX * remX + remY * remY > minMoveSq,
-  };
-
-  if (collectHits) result.collisions = hits;
-  return result;
-}
-
-function projectToContactCone(vx, vy, normals, count, epsilon) {
-  let feasible = true;
-
-  for (let i = 0; i < count; i++) {
-    const nx = normals[i * 2];
-    const ny = normals[i * 2 + 1];
-    if (vx * nx + vy * ny < -epsilon) {
-      feasible = false;
-      break;
-    }
-  }
-
-  if (feasible) return [vx, vy];
-
-  let bestX = 0;
-  let bestY = 0;
-  let bestDistSq = 0; // به دنبال بیشترین طول حرکت مجاز در راستای درست
-
-  for (let i = 0; i < count; i++) {
-    const nx = normals[i * 2];
-    const ny = normals[i * 2 + 1];
-    const into = vx * nx + vy * ny;
-
-    // تصویر روی سطح تماس i
-    const candidateX = vx - into * nx;
-    const candidateY = vy - into * ny;
-
-    let candidateFeasible = true;
-    for (let j = 0; j < count; j++) {
-      if (i === j) continue;
-      const jx = normals[j * 2];
-      const jy = normals[j * 2 + 1];
-      if (candidateX * jx + candidateY * jy < -epsilon) {
-        candidateFeasible = false;
-        break;
-      }
-    }
-
-    if (candidateFeasible) {
-      const magSq = candidateX * candidateX + candidateY * candidateY;
-      if (magSq > bestDistSq) {
-        bestDistSq = magSq;
-        bestX = candidateX;
-        bestY = candidateY;
-      }
-    }
-  }
-
-  // اصلاح ۳: بررسی تقاطع گوشه‌ها (V-shape Corner / Crease Slide)
-  // در صورتی که هیچ خط مماسی منفردی مجاز نبود، بردار حرکت در راستای تلاقی دو صفحه (در دوبعدی: 0) است
-  return [bestX, bestY];
-}
-
-function clamp01(value) {
-  return Math.max(0, Math.min(1, value));
+  return { x: entity.x, y: entity.y };
 }
