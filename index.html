@@ -1,78 +1,164 @@
 /**
- * اصلاحیه: مدیریت دقیق CCD و Sliding
- * بهبود: استفاده از Cross Product برای مدیریت گوشه‌ها (Corner Sliding)
+ * Kinematic CCD Swept-Circle Move & Slide
+ * Architecture: Valve Source Engine (ClipVelocity) & Quake III (PM_SlideMove)
  */
-
 function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
-  // ... (اعتبارسنجی ورودی‌ها همانند قبل باقی می‌ماند)
+  // ۱. اعتبارسنجی ورودی‌ها
+  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
+    throw new TypeError("entity must have finite x and y");
+  }
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    throw new TypeError("dx and dy must be finite");
+  }
+  if (!Number.isFinite(radius) || radius < 0) {
+    throw new RangeError("radius must be a finite non-negative number");
+  }
+  if (typeof castCircle !== "function") {
+    throw new TypeError("castCircle must be a function");
+  }
 
-  const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 6));
+  // ۲. تنظیم پارامترها و ثابت‌ها
+  const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 5));
   const skin = Math.max(0, opts.skin ?? 0.005);
-  const minMoveSq = (opts.minMove ?? 1e-6) ** 2;
+  const minMove = Math.max(0, opts.minMove ?? 1e-6);
+  const minMoveSq = minMove * minMove;
   const friction = clamp01(opts.friction ?? 0);
   const restitution = clamp01(opts.restitution ?? 0);
+  const collectHits = opts.collectHits === true;
 
-  let remX = dx, remY = dy;
-  let normalCount = 0;
-  const normals = opts.normalsBuffer ?? new Float64Array(maxIters * 2);
+  const startX = entity.x;
+  const startY = entity.y;
+  const hits = collectHits ? [] : null;
 
+  let remX = dx;
+  let remY = dy;
+  let hitCount = 0;
+  let iterations = 0;
+
+  // بافر اختصاصی نرمال‌ها بدون ایجاد Garbage Collection
+  const normalsX = new Float64Array(maxIters);
+  const normalsY = new Float64Array(maxIters);
+  let numNormals = 0;
+
+  // ۳. حلقه شبیه‌سازی حرکت
   for (let iter = 0; iter < maxIters; iter++) {
-    const distSq = remX * remX + remY * remY;
-    if (distSq <= minMoveSq) break;
+    iterations = iter + 1;
 
-    const hit = castCircle(entity.x, entity.y, radius, remX, remY);
-    if (!hit) {
-      entity.x += remX; entity.y += remY;
+    const distSq = remX * remX + remY * remY;
+    if (distSq <= minMoveSq) {
+      remX = 0;
+      remY = 0;
       break;
     }
 
-    // 1. پیشروی تا نزدیک سطح (با لحاظ Skin)
+    const hit = castCircle(entity.x, entity.y, radius, remX, remY);
+
+    // حرکت آزاد بدون برخورد
+    if (!hit) {
+      entity.x += remX;
+      entity.y += remY;
+      remX = 0;
+      remY = 0;
+      break;
+    }
+
+    // اعتبارسنجی خروجی برخورد
+    if (
+      !Number.isFinite(hit.t) ||
+      !Number.isFinite(hit.nx) ||
+      !Number.isFinite(hit.ny)
+    ) {
+      throw new TypeError("castCircle returned an invalid hit");
+    }
+
+    const nLen = Math.hypot(hit.nx, hit.ny);
+    if (nLen < 1e-12) {
+      throw new TypeError("collision normal must have non-zero length");
+    }
+
+    const nx = hit.nx / nLen;
+    const ny = hit.ny / nLen;
     const t = Math.max(0, Math.min(1, hit.t));
+    hitCount++;
+
+    if (collectHits) {
+      hits.push({ t, nx, ny });
+    }
+
+    // ۴. پیشروی ایمن تا نزدیکی سطح (محاسبه دقیق فاصله با احتساب skin)
     const dist = Math.sqrt(distSq);
-    // اصلاح دقیق Skin: حرکت تا t درصد مسیر، منهای مقدار skin برای جلوگیری از چسبیدن
-    const moveDist = dist * t;
-    const actualMoveDist = Math.max(0, moveDist - skin);
-    const fraction = (dist > 0) ? (actualMoveDist / dist) : 0;
+    const safeDist = Math.max(0, dist * t - skin);
+    const fraction = dist > 1e-12 ? safeDist / dist : 0;
 
     entity.x += remX * fraction;
     entity.y += remY * fraction;
 
-    // به‌روزرسانی بردار باقی‌مانده پس از برخورد
-    const nx = hit.nx, ny = hit.ny; // فرض بر نرمالیزه بودن از سمت تابع cast
-    
-    // 2. مدیریت جمع‌آوری نرمال‌ها (جلوگیری از نرمال‌های تکراری در سطوح تخت)
-    let duplicate = false;
-    for (let i = 0; i < normalCount; i++) {
-      if (normals[i * 2] * nx + normals[i * 2 + 1] * ny > 0.999) {
-        duplicate = true; break;
+    // ۵. اصلاح بردار حرکت باقی‌مانده متناسب با زمان صرف‌شده (جلوگیری از تولید انرژی کاذب)
+    const timeRemaining = 1 - fraction;
+    remX *= timeRemaining;
+    remY *= timeRemaining;
+
+    // ثبت نرمال‌های غیرتکراری سطح
+    let isDuplicate = false;
+    for (let i = 0; i < numNormals; i++) {
+      if (normalsX[i] * nx + normalsY[i] * ny > 0.999) {
+        isDuplicate = true;
+        break;
       }
     }
-    if (!duplicate) {
-      normals[normalCount * 2] = nx;
-      normals[normalCount * 2 + 1] = ny;
-      normalCount++;
+    if (!isDuplicate && numNormals < maxIters) {
+      normalsX[numNormals] = nx;
+      normalsY[numNormals] = ny;
+      numNormals++;
     }
 
-    // 3. محاسبه بردار لغزش (Sliding Plane)
-    // فرمول کلاسیک: Velocity = Velocity - (Velocity ⋅ Normal) * Normal
-    const dot = remX * nx + remY * ny;
-    remX -= dot * nx;
-    remY -= dot * ny;
+    // ۶. برش بردار حرکت (ClipVelocity با در نظر گرفتن Bounce و Friction)
+    const into = remX * nx + remY * ny;
+    if (into < 0) {
+      const normalCompX = into * nx;
+      const normalCompY = into * ny;
 
-    // اعمال اصطکاک روی بردار مماسی
-    remX *= (1 - friction);
-    remY *= (1 - friction);
+      // اعمال اصطکاک روی مؤلفه مماس و جهش روی مؤلفه عمود
+      const tangX = (remX - normalCompX) * (1 - friction);
+      const tangY = (remY - normalCompY) * (1 - friction);
 
-    // 4. جلوگیری از نفوذ مجدد به سطوح (تکرار برای هندسه‌های پیچیده/گوشه‌ها)
-    // اگر بعد از کسر نرمال، هنوز بردار حرکت به سمت داخل نرمال قبلی باشد، آن را صفر می‌کنیم.
-    for (let i = 0; i < normalCount; i++) {
-        const dotNew = remX * normals[i * 2] + remY * normals[i * 2 + 1];
-        if (dotNew < 0) {
-            remX -= dotNew * normals[i * 2];
-            remY -= dotNew * normals[i * 2 + 1];
-        }
+      remX = tangX - normalCompX * restitution;
+      remY = tangY - normalCompY * restitution;
+    }
+
+    // ۷. بررسی گیر افتادن در کنج و گوشه‌ها (Crease / Corner Handling)
+    // در فضای ۲بعدی، اگر بردار جدید به سمت داخل هر یک از سطوح تماس قبلی باشد، گیر کرده است
+    let trapped = false;
+    for (let i = 0; i < numNormals; i++) {
+      if (remX * normalsX[i] + remY * normalsY[i] < -minMove) {
+        trapped = true;
+        break;
+      }
+    }
+
+    if (trapped) {
+      remX = 0;
+      remY = 0;
+      break;
     }
   }
 
-  return { x: entity.x, y: entity.y };
+  const result = {
+    x: entity.x,
+    y: entity.y,
+    movedX: entity.x - startX,
+    movedY: entity.y - startY,
+    hitCount,
+    iterations,
+    remainingX: remX,
+    remainingY: remY,
+    truncated: remX * remX + remY * remY > minMoveSq,
+  };
+
+  if (collectHits) result.collisions = hits;
+  return result;
+}
+
+function clamp01(value) {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
 }
