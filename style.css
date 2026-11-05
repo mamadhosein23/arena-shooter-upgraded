@@ -1,65 +1,70 @@
 :root {
-  /* تنظیمات هسته (Core Engine) */
+  /* متغیرهای رنگ و مشخصات هندسی */
   --sys-hue: 170;
   --sys-primary: hsl(var(--sys-hue) 100% 55%);
   --sys-bg: #02040a;
   
-  /* مقادیر طراحی */
   --corner-size: 8px;
   --border-width: 1px;
   --timing-fn: cubic-bezier(0.19, 1, 0.22, 1);
   --accent-intensity: 1;
-}
 
-/* سیستم داده-محور (Data-Driven States) */
-[data-status="critical"] { 
-  --sys-hue: 345; 
-  --accent-intensity: 1.5; 
-}
-[data-status="active"] { 
-  --sys-hue: 170; 
-  --accent-intensity: 1; 
-}
-
-.panel {
-  /* اصلاح ۱: بهینه‌سازی رندر بدون حذف ابعاد المان */
-  contain: content;
-  will-change: transform;
-  
-  position: relative;
-  background: linear-gradient(135deg, rgba(8, 16, 34, 0.9), rgba(2, 4, 10, 0.95));
-  padding: 16px;
-  
-  /* تعریف برش چندضلعی به عنوان متغیر مشترک */
-  --clip-shape: polygon(
+  /* تعریف برش چندضلعی Chamfer در هسته سیستم */
+  --clip-cut: polygon(
     0 0,
     100% 0,
     100% calc(100% - var(--corner-size)),
     calc(100% - var(--corner-size)) 100%,
     0 100%
   );
-  clip-path: var(--clip-shape);
 }
 
-/* اصلاح ۲: ترسیم بوردر واقعی و پیوسته روی گوشه برش‌خورده */
+/* سیستم داده‌محور */
+[data-status="critical"] { 
+  --sys-hue: 345; 
+  --accent-intensity: 1.5; 
+}
+
+[data-status="active"] { 
+  --sys-hue: 170; 
+  --accent-intensity: 1; 
+}
+
+/* پنل رابط کاربری */
+.panel {
+  position: relative;
+  /* جلوگیری از رندر مجدد خارج از پنل بدون شکستن لایه‌بندی */
+  contain: paint;
+  padding: calc(16px + var(--border-width));
+  background: hsl(var(--sys-hue) 100% 60% / 0.35);
+  clip-path: var(--clip-cut);
+  isolation: isolate; /* ایجاد context مشخص بدون z-index منفی معیوب */
+}
+
+/* پس‌زمینه داخلی برای ایجاد ضخامت دقیق و شارپ بردر بدون باگ ماسک */
 .panel::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: hsl(var(--sys-hue) 100% 60% / 0.35);
-  clip-path: var(--clip-shape);
-  z-index: -1;
-  /* ایجاد ضخامت بوردر با ماسک داخلی */
-  -webkit-mask: 
-    linear-gradient(#fff 0 0) content-box, 
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  padding: var(--border-width);
+  inset: var(--border-width);
+  background: linear-gradient(135deg, rgba(8, 16, 34, 0.96), rgba(2, 4, 10, 0.98));
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - (var(--corner-size) - var(--border-width) * 0.414)),
+    calc(100% - (var(--corner-size) - var(--border-width) * 0.414)) 100%,
+    0 100%
+  );
+  z-index: 0;
   pointer-events: none;
 }
 
-/* کامپوننت نوار پیشرفت (High-Fidelity Gauge) */
+/* تضمین قرارگیری محتوا روی لایه پس‌زمینه */
+.panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* نوار پیشرفت (Gauge) */
 .gauge {
   height: 6px;
   width: 100%;
@@ -71,12 +76,12 @@
 .gauge__fill {
   height: 100%;
   width: var(--progress, 50%);
-  background: hsl(var(--sys-hue) 100% 50%);
+  background: var(--sys-primary);
   box-shadow: 0 0 calc(10px * var(--accent-intensity)) hsl(var(--sys-hue) 100% 50% / 0.6);
   transition: width 0.4s var(--timing-fn), background-color 0.3s;
 }
 
-/* افکت گلایچ سیستماتیک (System-wide Glitch Module) */
+/* ماژول گلایچ */
 .glitch-container {
   position: relative;
 }
@@ -92,7 +97,7 @@
   transition: opacity 0.2s ease;
 }
 
-/* انیمیشن‌های گسسته (Stepped Animations for Terminal Feel) */
+/* انیمیشن وضعیت بحرانی با رعایت دسترسی‌پذیری و بهینه‌سازی GPU */
 @keyframes terminal-flicker {
   0%, 100% { opacity: 1; transform: translate3d(0, 0, 0); }
   25% { opacity: 0.85; transform: skewX(0.4deg); }
@@ -100,13 +105,16 @@
   75% { opacity: 0.9; transform: translate3d(0.5px, 0, 0); }
 }
 
-[data-status="critical"] .panel {
-  animation: terminal-flicker 0.18s steps(2) infinite;
+@media (prefers-reduced-motion: no-preference) {
+  [data-status="critical"] .panel {
+    will-change: transform, opacity;
+    animation: terminal-flicker 0.18s steps(2) infinite;
+  }
 }
 
 /* تایپوگرافی مهندسی */
 .hud-text {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.15em;
   text-transform: uppercase;
