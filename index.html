@@ -1,186 +1,390 @@
 /**
- * Kinematic CCD Swept-Circle Move & Slide
- * Standard Architecture: Quake III (PM_SlideMove) & Valve Source (ClipVelocity)
- * 
- * @param {Object} entity - شیء شامل x و y
- * @param {number} vx - سرعت افقی (یا جابجایی اولیه dx به ازای فریم)
- * @param {number} vy - سرعت عمودی (یا جابجایی اولیه dy به ازای فریم)
- * @param {number} radius - شعاع دایره برخورد
- * @param {Function} castCircle - تابع Swept Circle: (x, y, r, dx, dy) => { t, nx, ny } | null
- * @param {Object} opts - تنظیمات فیزیکی شبیه‌سازی
+ * Robust 2D Kinematic Swept-Circle Move & Slide
+ *
+ * castCircle(x, y, radius, dx, dy) must return:
+ *   null
+ *   or {
+ *     t: number,       // normalized TOI in [0, 1]
+ *     nx: number,      // collision normal, pointing out of obstacle
+ *     ny: number,
+ *     startedInside?: boolean,
+ *     depth?: number   // penetration depth when startedInside is true
+ *   }
  */
-function moveEntityCCD(entity, vx, vy, radius, castCircle, opts = {}) {
-  // ۱. اعتبارسنجی دقیق ورودی‌ها
-  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
-    throw new TypeError("entity must have finite x and y coordinates");
-  }
-  if (!Number.isFinite(vx) || !Number.isFinite(vy)) {
-    throw new TypeError("vx and vy must be finite");
-  }
-  if (!Number.isFinite(radius) || radius < 0) {
-    throw new RangeError("radius must be a finite non-negative number");
-  }
-  if (typeof castCircle !== "function") {
-    throw new TypeError("castCircle must be a function");
-  }
+function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
+  validateInputs(entity, dx, dy, radius, castCircle);
 
-  // ۲. استخراج پارامترها و مقادیر آستانه
-  const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 4));
-  const skin = Math.max(0, opts.skin ?? 0.005);
-  const minMove = Math.max(0, opts.minMove ?? 1e-5);
-  const friction = clamp01(opts.friction ?? 0);
-  const restitution = clamp01(opts.restitution ?? 0);
+  const maxIters = clampInt(
+    finiteOption(opts.maxIters, 6, "maxIters"),
+    1,
+    32
+  );
+
+  const skin = Math.max(
+    0,
+    finiteOption(opts.skin, 0.005, "skin")
+  );
+
+  const minMove = Math.max(
+    0,
+    finiteOption(opts.minMove, 1e-6, "minMove")
+  );
+
+  const normalEpsilon = Math.max(
+    0,
+    finiteOption(opts.normalEpsilon, 1e-8, "normalEpsilon")
+  );
+
+  const duplicateDot = clamp(
+    finiteOption(opts.duplicateDot, 0.9995, "duplicateDot"),
+    -1,
+    1
+  );
+
+  const friction = clamp01(
+    finiteOption(opts.friction, 0, "friction")
+  );
+
+  const restitution = clamp01(
+    finiteOption(opts.restitution, 0, "restitution")
+  );
+
   const collectHits = opts.collectHits === true;
 
   const startX = entity.x;
   const startY = entity.y;
-  const hits = collectHits ? [] : null;
 
-  let curVx = vx;
-  let curVy = vy;
-  let timeLeft = 1.0; // کسری از کل زمان فریم باقی‌مانده (۰ تا ۱)
+  let remX = dx;
+  let remY = dy;
+
   let hitCount = 0;
   let iterations = 0;
+  let blocked = false;
+  let startedInside = false;
 
-  // بافر ایستا برای ثبت صفحات برخورد
+  const collisions = collectHits ? [] : null;
+
   const planesX = new Float64Array(maxIters);
   const planesY = new Float64Array(maxIters);
-  let numPlanes = 0;
+  let planeCount = 0;
 
-  // ۳. حلقه شبیه‌سازی گام زمانی
+  const minMoveSq = minMove * minMove;
+
   for (let iter = 0; iter < maxIters; iter++) {
+    const remLengthSq = remX * remX + remY * remY;
+
+    if (remLengthSq <= minMoveSq) {
+      remX = 0;
+      remY = 0;
+      break;
+    }
+
     iterations = iter + 1;
 
-    // محاسبه بردار جابجایی گام جاری
-    let stepDx = curVx * timeLeft;
-    let stepDy = curVy * timeLeft;
-    const stepDistSq = stepDx * stepDx + stepDy * stepDy;
+    const hit = castCircle(
+      entity.x,
+      entity.y,
+      radius,
+      remX,
+      remY
+    );
 
-    // توقف در صورت ناچیز بودن انرژی حرکتی
-    if (stepDistSq <= minMove * minMove) {
-      break;
-    }
-
-    const hit = castCircle(entity.x, entity.y, radius, stepDx, stepDy);
-
-    // الف) حرکت آزاد بدون مانع
     if (!hit) {
-      entity.x += stepDx;
-      entity.y += stepDy;
-      timeLeft = 0;
+      entity.x += remX;
+      entity.y += remY;
+
+      remX = 0;
+      remY = 0;
       break;
     }
 
-    // ب) اعتبارسنجی خروجی Hit
-    if (!Number.isFinite(hit.t) || !Number.isFinite(hit.nx) || !Number.isFinite(hit.ny)) {
-      throw new TypeError("castCircle returned an invalid hit object");
+    validateHit(hit);
+
+    const normalLength = Math.hypot(hit.nx, hit.ny);
+
+    if (normalLength <= 1e-12) {
+      throw new TypeError(
+        "castCircle collision normal must have non-zero length"
+      );
     }
 
-    const nLen = Math.hypot(hit.nx, hit.ny);
-    if (nLen < 1e-12) {
-      throw new TypeError("collision normal length must not be zero");
+    const nx = hit.nx / normalLength;
+    const ny = hit.ny / normalLength;
+    const t = clamp(hit.t, 0, 1);
+
+    /*
+     * Initial-overlap handling
+     *
+     * A sweep alone cannot reliably resolve an existing penetration.
+     * If castCircle provides penetration depth, depenetrate first.
+     */
+    if (hit.startedInside === true) {
+      startedInside = true;
+
+      if (!Number.isFinite(hit.depth) || hit.depth < 0) {
+        blocked = true;
+        break;
+      }
+
+      const pushDistance = hit.depth + skin;
+
+      entity.x += nx * pushDistance;
+      entity.y += ny * pushDistance;
+
+      if (collectHits) {
+        collisions.push({
+          t: 0,
+          nx,
+          ny,
+          startedInside: true,
+          depth: hit.depth,
+        });
+      }
+
+      hitCount++;
+      continue;
     }
 
-    const nx = hit.nx / nLen;
-    const ny = hit.ny / nLen;
-    const t = Math.max(0, Math.min(1, hit.t));
     hitCount++;
 
     if (collectHits) {
-      hits.push({ t, nx, ny });
+      collisions.push({
+        t,
+        nx,
+        ny,
+        startedInside: false,
+      });
     }
 
-    // ۴. پیشروی تا نقطه تماس با احتساب Skin در راستای نرمال
-    if (t > 0) {
-      entity.x += stepDx * t;
-      entity.y += stepDy * t;
-    }
+    const remLength = Math.sqrt(remLengthSq);
 
-    // اعمال پوسته‌ی اطمینان در راستای عمود بر سطح (جلوگیری از تغییر راستای مماسی)
-    if (skin > 0) {
-      entity.x += nx * skin;
-      entity.y += ny * skin;
-    }
+    /*
+     * Move to just before contact.
+     *
+     * Important:
+     * skin affects only the position advance. It must not give the entity
+     * additional simulation time.
+     */
+    const skinFraction =
+      remLength > 1e-12 ? skin / remLength : 0;
 
-    // کسر دقیق زمان مصرف‌شده
-    timeLeft -= timeLeft * t;
-    if (timeLeft <= 1e-4) {
-      break;
-    }
+    const advanceFraction = clamp(t - skinFraction, 0, 1);
 
-    // ۵. ثبت نرمال جدید سطح
-    let duplicate = false;
-    for (let i = 0; i < numPlanes; i++) {
-      if (planesX[i] * nx + planesY[i] * ny > 0.999) {
-        duplicate = true;
+    entity.x += remX * advanceFraction;
+    entity.y += remY * advanceFraction;
+
+    /*
+     * Remaining displacement is based on the actual TOI, not on the
+     * skin-adjusted advance fraction.
+     *
+     * Using (1 - advanceFraction) here would create extra movement/time.
+     */
+    const remainingFraction = 1 - t;
+
+    remX *= remainingFraction;
+    remY *= remainingFraction;
+
+    // Register a unique contact plane.
+    let duplicatePlane = false;
+
+    for (let i = 0; i < planeCount; i++) {
+      const planeDot =
+        planesX[i] * nx +
+        planesY[i] * ny;
+
+      if (planeDot >= duplicateDot) {
+        duplicatePlane = true;
         break;
       }
     }
-    if (!duplicate && numPlanes < maxIters) {
-      planesX[numPlanes] = nx;
-      planesY[numPlanes] = ny;
-      numPlanes++;
+
+    if (!duplicatePlane && planeCount < maxIters) {
+      planesX[planeCount] = nx;
+      planesY[planeCount] = ny;
+      planeCount++;
     }
 
-    // ۶. برش و اصلاح بردار سرعت (Clip Velocity)
-    clipVelocity(nx, ny, restitution, friction);
+    /*
+     * Apply response against the newly hit surface.
+     *
+     * Friction is applied only to the tangent of the new contact.
+     * Old planes are used only as non-penetration constraints.
+     */
+    const intoSurface = remX * nx + remY * ny;
 
-    // ۷. کنترل کنج‌ها و لغزش بین دو دیوار (Corner/Crease Handling در فضای ۲D)
-    let trapped = false;
-    for (let i = 0; i < numPlanes; i++) {
-      const dot = curVx * planesX[i] + curVy * planesY[i];
-      // اگر بردار به سمت پشت یکی از صفحات لغزش قبلی باشد:
-      if (dot < -1e-5) {
-        // برش مجدد روی صفحه قبلی
-        clipVelocity(planesX[i], planesY[i], 0, friction);
+    if (intoSurface < -normalEpsilon) {
+      const normalX = nx * intoSurface;
+      const normalY = ny * intoSurface;
 
-        // اگر باز هم با صفحه فعلی تداخل داشت یعنی داخل کنج بسته گیر کرده است
-        if (curVx * nx + curVy * ny < -1e-5) {
-          trapped = true;
-          break;
+      const tangentScale = 1 - friction;
+
+      const tangentX = (remX - normalX) * tangentScale;
+      const tangentY = (remY - normalY) * tangentScale;
+
+      remX = tangentX - normalX * restitution;
+      remY = tangentY - normalY * restitution;
+    }
+
+    /*
+     * Project the candidate displacement into the feasible region defined
+     * by all accumulated contact planes.
+     *
+     * Repeated projection is appropriate here because this is 2D and the
+     * number of contact planes is small.
+     */
+    const maxProjectionPasses = Math.max(1, planeCount);
+
+    for (let pass = 0; pass < maxProjectionPasses; pass++) {
+      let changed = false;
+
+      for (let i = 0; i < planeCount; i++) {
+        const px = planesX[i];
+        const py = planesY[i];
+
+        const intoPlane = remX * px + remY * py;
+
+        if (intoPlane < -normalEpsilon) {
+          remX -= px * intoPlane;
+          remY -= py * intoPlane;
+          changed = true;
         }
+      }
+
+      if (!changed) {
+        break;
       }
     }
 
-    if (trapped) {
-      curVx = 0;
-      curVy = 0;
+    /*
+     * Verify that projection satisfies every contact constraint.
+     * If not, the entity is trapped by incompatible planes.
+     */
+    let violatesPlane = false;
+
+    for (let i = 0; i < planeCount; i++) {
+      const dot =
+        remX * planesX[i] +
+        remY * planesY[i];
+
+      if (dot < -normalEpsilon) {
+        violatesPlane = true;
+        break;
+      }
+    }
+
+    if (violatesPlane) {
+      remX = 0;
+      remY = 0;
+      blocked = true;
+      break;
+    }
+
+    if (remX * remX + remY * remY <= minMoveSq) {
+      remX = 0;
+      remY = 0;
+      break;
+    }
+
+    /*
+     * A valid shape cast should not repeatedly return t=0 for tangential
+     * or separating motion. Stop safely if it does, preventing an infinite
+     * contact loop.
+     */
+    if (
+      t <= 1e-12 &&
+      remX * nx + remY * ny >= -normalEpsilon
+    ) {
+      blocked = true;
       break;
     }
   }
 
-  // تابع درونی برش سرعت بر مبنای ضرب داخلی و نگاشت مماس
-  function clipVelocity(normalX, normalY, bounce, fric) {
-    const into = curVx * normalX + curVy * normalY;
-    if (into < 0) {
-      const normalCompX = into * normalX;
-      const normalCompY = into * normalY;
+  const remainingLengthSq = remX * remX + remY * remY;
 
-      // مؤلفه مماس با احتساب اصطکاک
-      const tangX = (curVx - normalCompX) * (1 - fric);
-      const tangY = (curVy - normalCompY) * (1 - fric);
-
-      // مؤلفه نرمال با ضریب بازگشت الاستیک
-      curVx = tangX - normalCompX * bounce;
-      curVy = tangY - normalCompY * bounce;
-    }
-  }
-
-  return {
+  const result = {
     x: entity.x,
     y: entity.y,
-    vx: curVx,
-    vy: curVy,
+
     movedX: entity.x - startX,
     movedY: entity.y - startY,
+
+    remainingX: remX,
+    remainingY: remY,
+
     hitCount,
     iterations,
-    timeLeft,
-    trapped: curVx === 0 && curVy === 0 && timeLeft > 0,
-    ...(collectHits ? { collisions: hits } : {}),
+    blocked,
+    startedInside,
+
+    truncated:
+      remainingLengthSq > minMoveSq &&
+      iterations >= maxIters,
   };
+
+  if (collectHits) {
+    result.collisions = collisions;
+  }
+
+  return result;
+}
+
+function validateInputs(entity, dx, dy, radius, castCircle) {
+  if (
+    !entity ||
+    !Number.isFinite(entity.x) ||
+    !Number.isFinite(entity.y)
+  ) {
+    throw new TypeError("entity must have finite x and y");
+  }
+
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    throw new TypeError("dx and dy must be finite");
+  }
+
+  if (!Number.isFinite(radius) || radius < 0) {
+    throw new RangeError(
+      "radius must be a finite non-negative number"
+    );
+  }
+
+  if (typeof castCircle !== "function") {
+    throw new TypeError("castCircle must be a function");
+  }
+}
+
+function validateHit(hit) {
+  if (
+    !hit ||
+    !Number.isFinite(hit.t) ||
+    !Number.isFinite(hit.nx) ||
+    !Number.isFinite(hit.ny)
+  ) {
+    throw new TypeError(
+      "castCircle must return null or a valid hit object"
+    );
+  }
+}
+
+function finiteOption(value, fallback, name) {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`${name} must be finite`);
+  }
+
+  return value;
+}
+
+function clampInt(value, min, max) {
+  return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
 function clamp01(value) {
-  return value < 0 ? 0 : value > 1 ? 1 : value;
+  return clamp(value, 0, 1);
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
