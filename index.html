@@ -35,10 +35,10 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
   let hitCount = 0;
   let iterations = 0;
 
-  // بافر اختصاصی نرمال‌ها بدون ایجاد Garbage Collection
-  const normalsX = new Float64Array(maxIters);
-  const normalsY = new Float64Array(maxIters);
-  let numNormals = 0;
+  // بافر اختصاصی نرمال‌ها
+  const planesX = new Float64Array(maxIters);
+  const planesY = new Float64Array(maxIters);
+  let numPlanes = 0;
 
   // ۳. حلقه شبیه‌سازی حرکت
   for (let iter = 0; iter < maxIters; iter++) {
@@ -85,7 +85,7 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       hits.push({ t, nx, ny });
     }
 
-    // ۴. پیشروی ایمن تا نزدیکی سطح (محاسبه دقیق فاصله با احتساب skin)
+    // ۴. پیشروی ایمن تا فاصله skin
     const dist = Math.sqrt(distSq);
     const safeDist = Math.max(0, dist * t - skin);
     const fraction = dist > 1e-12 ? safeDist / dist : 0;
@@ -93,50 +93,66 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
     entity.x += remX * fraction;
     entity.y += remY * fraction;
 
-    // ۵. اصلاح بردار حرکت باقی‌مانده متناسب با زمان صرف‌شده (جلوگیری از تولید انرژی کاذب)
+    // کسر زمان صرف‌شده
     const timeRemaining = 1 - fraction;
     remX *= timeRemaining;
     remY *= timeRemaining;
 
-    // ثبت نرمال‌های غیرتکراری سطح
+    // ثبت صفحه برخورد (جلوگیری از نرمال‌های تکراری)
     let isDuplicate = false;
-    for (let i = 0; i < numNormals; i++) {
-      if (normalsX[i] * nx + normalsY[i] * ny > 0.999) {
+    for (let i = 0; i < numPlanes; i++) {
+      if (planesX[i] * nx + planesY[i] * ny > 0.999) {
         isDuplicate = true;
         break;
       }
     }
-    if (!isDuplicate && numNormals < maxIters) {
-      normalsX[numNormals] = nx;
-      normalsY[numNormals] = ny;
-      numNormals++;
+    if (!isDuplicate && numPlanes < maxIters) {
+      planesX[numPlanes] = nx;
+      planesY[numPlanes] = ny;
+      numPlanes++;
     }
 
-    // ۶. برش بردار حرکت (ClipVelocity با در نظر گرفتن Bounce و Friction)
+    // ۵. برش بردار حرکت (Valve ClipVelocity Standard)
+    // overbounce = 1.0 (بدون جهش) تا 2.0 (جهش کامل الاستیک)
+    const overbounce = 1 + restitution;
     const into = remX * nx + remY * ny;
+
     if (into < 0) {
-      const normalCompX = into * nx;
-      const normalCompY = into * ny;
+      // تفکیک مؤلفه نرمال و مماس
+      const normalX = into * nx;
+      const normalY = into * ny;
 
-      // اعمال اصطکاک روی مؤلفه مماس و جهش روی مؤلفه عمود
-      const tangX = (remX - normalCompX) * (1 - friction);
-      const tangY = (remY - normalCompY) * (1 - friction);
+      // اعمال اصطکاک روی لغزش مماسی و ریباند روی نرمال
+      const slideX = (remX - normalX) * (1 - friction);
+      const slideY = (remY - normalY) * (1 - friction);
 
-      remX = tangX - normalCompX * restitution;
-      remY = tangY - normalCompY * restitution;
+      remX = slideX - normalX * restitution;
+      remY = slideY - normalY * restitution;
     }
 
-    // ۷. بررسی گیر افتادن در کنج و گوشه‌ها (Crease / Corner Handling)
-    // در فضای ۲بعدی، اگر بردار جدید به سمت داخل هر یک از سطوح تماس قبلی باشد، گیر کرده است
-    let trapped = false;
-    for (let i = 0; i < numNormals; i++) {
-      if (remX * normalsX[i] + remY * normalsY[i] < -minMove) {
-        trapped = true;
-        break;
+    // ۶. حل برخورد چندگانه / کنج‌ها (Multi-plane interaction)
+    // بررسی اینکه آیا بردار کلیپ‌شده با صفحات قبلی تداخل دارد یا خیر
+    let blocked = false;
+    for (let i = 0; i < numPlanes; i++) {
+      const dot = remX * planesX[i] + remY * planesY[i];
+      if (dot < -1e-4) {
+        // اگر ۲ صفحه متقاطع داریم و بردار به داخل یکی از آنهاست:
+        if (numPlanes >= 2) {
+          // در ۲بعدی، اگر بین دو صفحه مخالف گیر کند، حرکت متوقف است
+          const planeDot = planesX[0] * planesX[1] + planesY[0] * planesY[1];
+          if (planeDot < 0) {
+            blocked = true;
+            break;
+          }
+        }
+        // اگر هنوز امکان لغزش روی صفحه قبلی وجود دارد، دوباره کلیپ می‌کنیم
+        const pInto = dot;
+        remX -= pInto * planesX[i];
+        remY -= pInto * planesY[i];
       }
     }
 
-    if (trapped) {
+    if (blocked) {
       remX = 0;
       remY = 0;
       break;
