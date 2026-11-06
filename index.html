@@ -1,14 +1,21 @@
 /**
  * Kinematic CCD Swept-Circle Move & Slide
- * Architecture: Valve Source Engine (ClipVelocity) & Quake III (PM_SlideMove)
+ * Standard Architecture: Quake III (PM_SlideMove) & Valve Source (ClipVelocity)
+ * 
+ * @param {Object} entity - شیء شامل x و y
+ * @param {number} vx - سرعت افقی (یا جابجایی اولیه dx به ازای فریم)
+ * @param {number} vy - سرعت عمودی (یا جابجایی اولیه dy به ازای فریم)
+ * @param {number} radius - شعاع دایره برخورد
+ * @param {Function} castCircle - تابع Swept Circle: (x, y, r, dx, dy) => { t, nx, ny } | null
+ * @param {Object} opts - تنظیمات فیزیکی شبیه‌سازی
  */
-function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
-  // ۱. اعتبارسنجی ورودی‌ها
+function moveEntityCCD(entity, vx, vy, radius, castCircle, opts = {}) {
+  // ۱. اعتبارسنجی دقیق ورودی‌ها
   if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
-    throw new TypeError("entity must have finite x and y");
+    throw new TypeError("entity must have finite x and y coordinates");
   }
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
-    throw new TypeError("dx and dy must be finite");
+  if (!Number.isFinite(vx) || !Number.isFinite(vy)) {
+    throw new TypeError("vx and vy must be finite");
   }
   if (!Number.isFinite(radius) || radius < 0) {
     throw new RangeError("radius must be a finite non-negative number");
@@ -17,11 +24,10 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
     throw new TypeError("castCircle must be a function");
   }
 
-  // ۲. تنظیم پارامترها و ثابت‌ها
-  const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 5));
+  // ۲. استخراج پارامترها و مقادیر آستانه
+  const maxIters = Math.max(1, Math.floor(opts.maxIters ?? 4));
   const skin = Math.max(0, opts.skin ?? 0.005);
-  const minMove = Math.max(0, opts.minMove ?? 1e-6);
-  const minMoveSq = minMove * minMove;
+  const minMove = Math.max(0, opts.minMove ?? 1e-5);
   const friction = clamp01(opts.friction ?? 0);
   const restitution = clamp01(opts.restitution ?? 0);
   const collectHits = opts.collectHits === true;
@@ -30,50 +36,49 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
   const startY = entity.y;
   const hits = collectHits ? [] : null;
 
-  let remX = dx;
-  let remY = dy;
+  let curVx = vx;
+  let curVy = vy;
+  let timeLeft = 1.0; // کسری از کل زمان فریم باقی‌مانده (۰ تا ۱)
   let hitCount = 0;
   let iterations = 0;
 
-  // بافر اختصاصی نرمال‌ها
+  // بافر ایستا برای ثبت صفحات برخورد
   const planesX = new Float64Array(maxIters);
   const planesY = new Float64Array(maxIters);
   let numPlanes = 0;
 
-  // ۳. حلقه شبیه‌سازی حرکت
+  // ۳. حلقه شبیه‌سازی گام زمانی
   for (let iter = 0; iter < maxIters; iter++) {
     iterations = iter + 1;
 
-    const distSq = remX * remX + remY * remY;
-    if (distSq <= minMoveSq) {
-      remX = 0;
-      remY = 0;
+    // محاسبه بردار جابجایی گام جاری
+    let stepDx = curVx * timeLeft;
+    let stepDy = curVy * timeLeft;
+    const stepDistSq = stepDx * stepDx + stepDy * stepDy;
+
+    // توقف در صورت ناچیز بودن انرژی حرکتی
+    if (stepDistSq <= minMove * minMove) {
       break;
     }
 
-    const hit = castCircle(entity.x, entity.y, radius, remX, remY);
+    const hit = castCircle(entity.x, entity.y, radius, stepDx, stepDy);
 
-    // حرکت آزاد بدون برخورد
+    // الف) حرکت آزاد بدون مانع
     if (!hit) {
-      entity.x += remX;
-      entity.y += remY;
-      remX = 0;
-      remY = 0;
+      entity.x += stepDx;
+      entity.y += stepDy;
+      timeLeft = 0;
       break;
     }
 
-    // اعتبارسنجی خروجی برخورد
-    if (
-      !Number.isFinite(hit.t) ||
-      !Number.isFinite(hit.nx) ||
-      !Number.isFinite(hit.ny)
-    ) {
-      throw new TypeError("castCircle returned an invalid hit");
+    // ب) اعتبارسنجی خروجی Hit
+    if (!Number.isFinite(hit.t) || !Number.isFinite(hit.nx) || !Number.isFinite(hit.ny)) {
+      throw new TypeError("castCircle returned an invalid hit object");
     }
 
     const nLen = Math.hypot(hit.nx, hit.ny);
     if (nLen < 1e-12) {
-      throw new TypeError("collision normal must have non-zero length");
+      throw new TypeError("collision normal length must not be zero");
     }
 
     const nx = hit.nx / nLen;
@@ -85,94 +90,95 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       hits.push({ t, nx, ny });
     }
 
-    // ۴. پیشروی ایمن تا فاصله skin
-    const dist = Math.sqrt(distSq);
-    const safeDist = Math.max(0, dist * t - skin);
-    const fraction = dist > 1e-12 ? safeDist / dist : 0;
+    // ۴. پیشروی تا نقطه تماس با احتساب Skin در راستای نرمال
+    if (t > 0) {
+      entity.x += stepDx * t;
+      entity.y += stepDy * t;
+    }
 
-    entity.x += remX * fraction;
-    entity.y += remY * fraction;
+    // اعمال پوسته‌ی اطمینان در راستای عمود بر سطح (جلوگیری از تغییر راستای مماسی)
+    if (skin > 0) {
+      entity.x += nx * skin;
+      entity.y += ny * skin;
+    }
 
-    // کسر زمان صرف‌شده
-    const timeRemaining = 1 - fraction;
-    remX *= timeRemaining;
-    remY *= timeRemaining;
+    // کسر دقیق زمان مصرف‌شده
+    timeLeft -= timeLeft * t;
+    if (timeLeft <= 1e-4) {
+      break;
+    }
 
-    // ثبت صفحه برخورد (جلوگیری از نرمال‌های تکراری)
-    let isDuplicate = false;
+    // ۵. ثبت نرمال جدید سطح
+    let duplicate = false;
     for (let i = 0; i < numPlanes; i++) {
       if (planesX[i] * nx + planesY[i] * ny > 0.999) {
-        isDuplicate = true;
+        duplicate = true;
         break;
       }
     }
-    if (!isDuplicate && numPlanes < maxIters) {
+    if (!duplicate && numPlanes < maxIters) {
       planesX[numPlanes] = nx;
       planesY[numPlanes] = ny;
       numPlanes++;
     }
 
-    // ۵. برش بردار حرکت (Valve ClipVelocity Standard)
-    // overbounce = 1.0 (بدون جهش) تا 2.0 (جهش کامل الاستیک)
-    const overbounce = 1 + restitution;
-    const into = remX * nx + remY * ny;
+    // ۶. برش و اصلاح بردار سرعت (Clip Velocity)
+    clipVelocity(nx, ny, restitution, friction);
 
-    if (into < 0) {
-      // تفکیک مؤلفه نرمال و مماس
-      const normalX = into * nx;
-      const normalY = into * ny;
-
-      // اعمال اصطکاک روی لغزش مماسی و ریباند روی نرمال
-      const slideX = (remX - normalX) * (1 - friction);
-      const slideY = (remY - normalY) * (1 - friction);
-
-      remX = slideX - normalX * restitution;
-      remY = slideY - normalY * restitution;
-    }
-
-    // ۶. حل برخورد چندگانه / کنج‌ها (Multi-plane interaction)
-    // بررسی اینکه آیا بردار کلیپ‌شده با صفحات قبلی تداخل دارد یا خیر
-    let blocked = false;
+    // ۷. کنترل کنج‌ها و لغزش بین دو دیوار (Corner/Crease Handling در فضای ۲D)
+    let trapped = false;
     for (let i = 0; i < numPlanes; i++) {
-      const dot = remX * planesX[i] + remY * planesY[i];
-      if (dot < -1e-4) {
-        // اگر ۲ صفحه متقاطع داریم و بردار به داخل یکی از آنهاست:
-        if (numPlanes >= 2) {
-          // در ۲بعدی، اگر بین دو صفحه مخالف گیر کند، حرکت متوقف است
-          const planeDot = planesX[0] * planesX[1] + planesY[0] * planesY[1];
-          if (planeDot < 0) {
-            blocked = true;
-            break;
-          }
+      const dot = curVx * planesX[i] + curVy * planesY[i];
+      // اگر بردار به سمت پشت یکی از صفحات لغزش قبلی باشد:
+      if (dot < -1e-5) {
+        // برش مجدد روی صفحه قبلی
+        clipVelocity(planesX[i], planesY[i], 0, friction);
+
+        // اگر باز هم با صفحه فعلی تداخل داشت یعنی داخل کنج بسته گیر کرده است
+        if (curVx * nx + curVy * ny < -1e-5) {
+          trapped = true;
+          break;
         }
-        // اگر هنوز امکان لغزش روی صفحه قبلی وجود دارد، دوباره کلیپ می‌کنیم
-        const pInto = dot;
-        remX -= pInto * planesX[i];
-        remY -= pInto * planesY[i];
       }
     }
 
-    if (blocked) {
-      remX = 0;
-      remY = 0;
+    if (trapped) {
+      curVx = 0;
+      curVy = 0;
       break;
     }
   }
 
-  const result = {
+  // تابع درونی برش سرعت بر مبنای ضرب داخلی و نگاشت مماس
+  function clipVelocity(normalX, normalY, bounce, fric) {
+    const into = curVx * normalX + curVy * normalY;
+    if (into < 0) {
+      const normalCompX = into * normalX;
+      const normalCompY = into * normalY;
+
+      // مؤلفه مماس با احتساب اصطکاک
+      const tangX = (curVx - normalCompX) * (1 - fric);
+      const tangY = (curVy - normalCompY) * (1 - fric);
+
+      // مؤلفه نرمال با ضریب بازگشت الاستیک
+      curVx = tangX - normalCompX * bounce;
+      curVy = tangY - normalCompY * bounce;
+    }
+  }
+
+  return {
     x: entity.x,
     y: entity.y,
+    vx: curVx,
+    vy: curVy,
     movedX: entity.x - startX,
     movedY: entity.y - startY,
     hitCount,
     iterations,
-    remainingX: remX,
-    remainingY: remY,
-    truncated: remX * remX + remY * remY > minMoveSq,
+    timeLeft,
+    trapped: curVx === 0 && curVy === 0 && timeLeft > 0,
+    ...(collectHits ? { collisions: hits } : {}),
   };
-
-  if (collectHits) result.collisions = hits;
-  return result;
 }
 
 function clamp01(value) {
