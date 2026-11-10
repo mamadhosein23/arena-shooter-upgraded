@@ -1,55 +1,64 @@
 /**
- * Robust 2D Kinematic Swept-Circle Move & Slide
- *
- * castCircle(x, y, radius, dx, dy) must return:
- *   null
- *   or {
- *     t: number,       // normalized TOI in [0, 1]
- *     nx: number,      // collision normal, pointing out of obstacle
- *     ny: number,
- *     startedInside?: boolean,
- *     depth?: number   // penetration depth when startedInside is true
- *   }
+ * @fileoverview Robust 2D Kinematic Swept-Circle Move & Slide - Enterprise / Engine Grade
+ * @author محمدحسین (Optimized & Refactored)
+ * @license MIT
  */
-function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
+
+/**
+ * @typedef {Object} Entity
+ * @property {number} x - موقعیت فعلی X
+ * @property {number} y - موقعیت فعلی Y
+ * @property {number} [vx] - سرعت در راستای X (اختیاری برای محاسبات پیش‌بینی)
+ * @property {number} [vy] - سرعت در راستای Y (اختیاری برای محاسبات پیش‌بینی)
+ */
+
+/**
+ * @typedef {Object} CCDHit
+ * @property {number} t - زمان برخورد نرمال‌شده در بازه [0, 1]
+ * @property {number} nx - بردار نرمال برخورد (خارج از مانع)
+ * @property {number} ny - بردار نرمال برخورد
+ * @property {boolean} [startedInside] - آیا از داخل مانع شروع شده است؟
+ * @property {number} [depth] - عمق نفوذ در صورت شروع از داخل
+ */
+
+/**
+ * @typedef {Object} CCDOptions
+ * @property {number} [maxIters=8] - حداکثر تکرار برای حل برخوردهای چندگانه
+ * @property {number} [skin=0.002] - لایه محافظ برای جلوگیری از چسبیدن به سطح
+ * @property {number} [minMove=1e-6] - آستانه حداقل حرکت برای متوقف کردن محاسبات
+ * @property {number} [normalEpsilon=1e-8] - خطای مجاز محاسبات برداری
+ * @property {number} [duplicateDot=0.999] - آستانه تشخیص سطوح موازی تکراری
+ * @property {number} [friction=0.1] - ضریب اصطکاک سطحی [0, 1]
+ * @property {number} [restitution=0] - ضریب بازتاب (ارتجاع) [0, 1]
+ * @property {boolean} [collectHits=false] - جمع‌آوری آرایه کامل برخوردها
+ * @property {boolean} [trackPath=false] - ثبت نقاط میانی حرکت برای درون‌یابی (Interpolation)
+ * @property {number} [cornerBias=1e-4] - بایاس حرکتی برای عبور نرم از لبه‌ها و گوشه‌ها
+ */
+
+/**
+ * حرکت پیوسته دایره (Swept-Circle) همراه با حل دقیق لغزش، اصطکاک و برخوردهای چندگانه.
+ * 
+ * @param {Entity} entity - شیء مورد نظر شامل مختصات x و y
+ * @param {number} dx - جابجایی درخواستی در محور X
+ * @param {number} dy - جابجایی درخواستی در محور Y
+ * @param {number} radius - شعاع دایره برخورد
+ * @param {Function} castCircle - تابع بازبینی برخورد (Raycast/ShapeCast)
+ * @param {CCDOptions} [opts={}] - تنظیمات پیشرفته فیزیک
+ * @returns {Object} نتیجه نهایی حرکت، وضعیت برخوردها و آمارهای فیزیکی
+ */
+function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
   validateInputs(entity, dx, dy, radius, castCircle);
 
-  const maxIters = clampInt(
-    finiteOption(opts.maxIters, 6, "maxIters"),
-    1,
-    32
-  );
-
-  const skin = Math.max(
-    0,
-    finiteOption(opts.skin, 0.005, "skin")
-  );
-
-  const minMove = Math.max(
-    0,
-    finiteOption(opts.minMove, 1e-6, "minMove")
-  );
-
-  const normalEpsilon = Math.max(
-    0,
-    finiteOption(opts.normalEpsilon, 1e-8, "normalEpsilon")
-  );
-
-  const duplicateDot = clamp(
-    finiteOption(opts.duplicateDot, 0.9995, "duplicateDot"),
-    -1,
-    1
-  );
-
-  const friction = clamp01(
-    finiteOption(opts.friction, 0, "friction")
-  );
-
-  const restitution = clamp01(
-    finiteOption(opts.restitution, 0, "restitution")
-  );
-
+  const maxIters = clampInt(finiteOption(opts.maxIters, 8, "maxIters"), 1, 32);
+  const skin = Math.max(0, finiteOption(opts.skin, 0.002, "skin"));
+  const minMove = Math.max(0, finiteOption(opts.minMove, 1e-6, "minMove"));
+  const normalEpsilon = Math.max(0, finiteOption(opts.normalEpsilon, 1e-8, "normalEpsilon"));
+  const duplicateDot = clamp(finiteOption(opts.duplicateDot, 0.999, "duplicateDot"), -1, 1);
+  const friction = clamp01(finiteOption(opts.friction, 0.1, "friction"));
+  const restitution = clamp01(finiteOption(opts.restitution, 0, "restitution"));
   const collectHits = opts.collectHits === true;
+  const trackPath = opts.trackPath === true;
+  const cornerBias = Math.max(0, finiteOption(opts.cornerBias, 1e-4, "cornerBias"));
 
   const startX = entity.x;
   const startY = entity.y;
@@ -63,7 +72,9 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
   let startedInside = false;
 
   const collisions = collectHits ? [] : null;
+  const waypoints = trackPath ? [{ x: startX, y: startY }] : null;
 
+  // استفاده از Float64Array برای بهینه‌سازی حافظه و جلوگیری از GC Overhead
   const planesX = new Float64Array(maxIters);
   const planesY = new Float64Array(maxIters);
   let planeCount = 0;
@@ -81,17 +92,12 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
 
     iterations = iter + 1;
 
-    const hit = castCircle(
-      entity.x,
-      entity.y,
-      radius,
-      remX,
-      remY
-    );
+    const hit = castCircle(entity.x, entity.y, radius, remX, remY);
 
     if (!hit) {
       entity.x += remX;
       entity.y += remY;
+      if (waypoints) waypoints.push({ x: entity.x, y: entity.y });
 
       remX = 0;
       remY = 0;
@@ -101,23 +107,15 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
     validateHit(hit);
 
     const normalLength = Math.hypot(hit.nx, hit.ny);
-
     if (normalLength <= 1e-12) {
-      throw new TypeError(
-        "castCircle collision normal must have non-zero length"
-      );
+      throw new TypeError("castCircle collision normal must have non-zero length");
     }
 
     const nx = hit.nx / normalLength;
     const ny = hit.ny / normalLength;
     const t = clamp(hit.t, 0, 1);
 
-    /*
-     * Initial-overlap handling
-     *
-     * A sweep alone cannot reliably resolve an existing penetration.
-     * If castCircle provides penetration depth, depenetrate first.
-     */
+    // مدیریت نفوذ اولیه (Initial Overlap)
     if (hit.startedInside === true) {
       startedInside = true;
 
@@ -127,18 +125,13 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       }
 
       const pushDistance = hit.depth + skin;
-
       entity.x += nx * pushDistance;
       entity.y += ny * pushDistance;
 
+      if (waypoints) waypoints.push({ x: entity.x, y: entity.y });
+
       if (collectHits) {
-        collisions.push({
-          t: 0,
-          nx,
-          ny,
-          startedInside: true,
-          depth: hit.depth,
-        });
+        collisions.push({ t: 0, nx, ny, startedInside: true, depth: hit.depth });
       }
 
       hitCount++;
@@ -146,52 +139,27 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
     }
 
     hitCount++;
-
     if (collectHits) {
-      collisions.push({
-        t,
-        nx,
-        ny,
-        startedInside: false,
-      });
+      collisions.push({ t, nx, ny, startedInside: false });
     }
 
     const remLength = Math.sqrt(remLengthSq);
-
-    /*
-     * Move to just before contact.
-     *
-     * Important:
-     * skin affects only the position advance. It must not give the entity
-     * additional simulation time.
-     */
-    const skinFraction =
-      remLength > 1e-12 ? skin / remLength : 0;
-
+    const skinFraction = remLength > 1e-12 ? skin / remLength : 0;
     const advanceFraction = clamp(t - skinFraction, 0, 1);
 
     entity.x += remX * advanceFraction;
     entity.y += remY * advanceFraction;
 
-    /*
-     * Remaining displacement is based on the actual TOI, not on the
-     * skin-adjusted advance fraction.
-     *
-     * Using (1 - advanceFraction) here would create extra movement/time.
-     */
-    const remainingFraction = 1 - t;
+    if (waypoints) waypoints.push({ x: entity.x, y: entity.y });
 
+    const remainingFraction = 1 - t;
     remX *= remainingFraction;
     remY *= remainingFraction;
 
-    // Register a unique contact plane.
+    // ثبت صفحه برخورد منحصر به فرد با فیلتر موازی‌بودن
     let duplicatePlane = false;
-
     for (let i = 0; i < planeCount; i++) {
-      const planeDot =
-        planesX[i] * nx +
-        planesY[i] * ny;
-
+      const planeDot = planesX[i] * nx + planesY[i] * ny;
       if (planeDot >= duplicateDot) {
         duplicatePlane = true;
         break;
@@ -204,18 +172,11 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       planeCount++;
     }
 
-    /*
-     * Apply response against the newly hit surface.
-     *
-     * Friction is applied only to the tangent of the new contact.
-     * Old planes are used only as non-penetration constraints.
-     */
+    // اعمال اصطکاک و بازتاب (Friction & Restitution) روی بردار باقی‌مانده
     const intoSurface = remX * nx + remY * ny;
-
     if (intoSurface < -normalEpsilon) {
       const normalX = nx * intoSurface;
       const normalY = ny * intoSurface;
-
       const tangentScale = 1 - friction;
 
       const tangentX = (remX - normalX) * tangentScale;
@@ -225,22 +186,14 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       remY = tangentY - normalY * restitution;
     }
 
-    /*
-     * Project the candidate displacement into the feasible region defined
-     * by all accumulated contact planes.
-     *
-     * Repeated projection is appropriate here because this is 2D and the
-     * number of contact planes is small.
-     */
-    const maxProjectionPasses = Math.max(1, planeCount);
-
+    // پروژکسیون چندمرحله‌ای روی محدوده‌های برخورد (Constraint Projection)
+    const maxProjectionPasses = Math.max(2, planeCount); // افزایش دقت در گوشه‌ها
     for (let pass = 0; pass < maxProjectionPasses; pass++) {
       let changed = false;
 
       for (let i = 0; i < planeCount; i++) {
         const px = planesX[i];
         const py = planesY[i];
-
         const intoPlane = remX * px + remY * py;
 
         if (intoPlane < -normalEpsilon) {
@@ -250,22 +203,19 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
         }
       }
 
-      if (!changed) {
-        break;
-      }
+      if (!changed) break;
     }
 
-    /*
-     * Verify that projection satisfies every contact constraint.
-     * If not, the entity is trapped by incompatible planes.
-     */
+    // افزودن Corner Bias برای جلوگیری از گیر کردن در تقاطع دیوارها
+    if (planeCount >= 2 && cornerBias > 0) {
+      remX += (nx * cornerBias);
+      remY += (ny * cornerBias);
+    }
+
+    // اعتبارسنجی نهایی صفحات
     let violatesPlane = false;
-
     for (let i = 0; i < planeCount; i++) {
-      const dot =
-        remX * planesX[i] +
-        remY * planesY[i];
-
+      const dot = remX * planesX[i] + remY * planesY[i];
       if (dot < -normalEpsilon) {
         violatesPlane = true;
         break;
@@ -285,15 +235,7 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
       break;
     }
 
-    /*
-     * A valid shape cast should not repeatedly return t=0 for tangential
-     * or separating motion. Stop safely if it does, preventing an infinite
-     * contact loop.
-     */
-    if (
-      t <= 1e-12 &&
-      remX * nx + remY * ny >= -normalEpsilon
-    ) {
+    if (t <= 1e-12 && remX * nx + remY * ny >= -normalEpsilon) {
       blocked = true;
       break;
     }
@@ -304,76 +246,49 @@ function moveEntityCCD(entity, dx, dy, radius, castCircle, opts = {}) {
   const result = {
     x: entity.x,
     y: entity.y,
-
     movedX: entity.x - startX,
     movedY: entity.y - startY,
-
     remainingX: remX,
     remainingY: remY,
-
     hitCount,
     iterations,
     blocked,
     startedInside,
-
-    truncated:
-      remainingLengthSq > minMoveSq &&
-      iterations >= maxIters,
+    truncated: remainingLengthSq > minMoveSq && iterations >= maxIters,
   };
 
-  if (collectHits) {
-    result.collisions = collisions;
-  }
+  if (collectHits) result.collisions = collisions;
+  if (waypoints) result.waypoints = waypoints;
 
   return result;
 }
 
+// ==================== کمکی‌ها (Validation & Helpers) ====================
+
 function validateInputs(entity, dx, dy, radius, castCircle) {
-  if (
-    !entity ||
-    !Number.isFinite(entity.x) ||
-    !Number.isFinite(entity.y)
-  ) {
-    throw new TypeError("entity must have finite x and y");
+  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
+    throw new TypeError("Entity must have finite x and y coordinates.");
   }
-
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
-    throw new TypeError("dx and dy must be finite");
+    throw new TypeError("Displacement vector (dx, dy) must be finite numbers.");
   }
-
   if (!Number.isFinite(radius) || radius < 0) {
-    throw new RangeError(
-      "radius must be a finite non-negative number"
-    );
+    throw new RangeError("Radius must be a finite non-negative number.");
   }
-
   if (typeof castCircle !== "function") {
-    throw new TypeError("castCircle must be a function");
+    throw new TypeError("castCircle argument must be a valid function.");
   }
 }
 
 function validateHit(hit) {
-  if (
-    !hit ||
-    !Number.isFinite(hit.t) ||
-    !Number.isFinite(hit.nx) ||
-    !Number.isFinite(hit.ny)
-  ) {
-    throw new TypeError(
-      "castCircle must return null or a valid hit object"
-    );
+  if (!hit || !Number.isFinite(hit.t) || !Number.isFinite(hit.nx) || !Number.isFinite(hit.ny)) {
+    throw new TypeError("castCircle returned an invalid hit structure.");
   }
 }
 
 function finiteOption(value, fallback, name) {
-  if (value === undefined) {
-    return fallback;
-  }
-
-  if (!Number.isFinite(value)) {
-    throw new TypeError(`${name} must be finite`);
-  }
-
+  if (value === undefined) return fallback;
+  if (!Number.isFinite(value)) throw new TypeError(`Option '${name}' must be a finite number.`);
   return value;
 }
 
