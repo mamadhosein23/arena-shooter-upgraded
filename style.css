@@ -5,7 +5,7 @@
  */
 
 :root {
-  /* متغیرهای رنگ و مشخصات هندسی پایه */
+  /* Base color and geometric specifications */
   --sys-hue: 170;
   --sys-saturation: 100%;
   --sys-lightness: 55%;
@@ -18,7 +18,7 @@
   --timing-fn: cubic-bezier(0.19, 1, 0.22, 1);
   --accent-intensity: 1;
 
-  /* تعریف برش چندضلعی Chamfer بهینه شده برای هسته سیستم */
+  /* Chamfer polygon clip-path core definition */
   --clip-cut: polygon(
     0 0,
     100% 0,
@@ -28,7 +28,7 @@
   );
 }
 
-/* سیستم داده‌محور پویا (States) */
+/* Dynamic data-driven state selectors */
 [data-status="critical"] { 
   --sys-hue: 345; 
   --sys-lightness: 50%;
@@ -53,7 +53,7 @@
   --accent-intensity: 1;
 }
 
-/* پنل رابط کاربری پیشرفته */
+/* Advanced UI panel module */
 .panel {
   position: relative;
   contain: paint layout;
@@ -68,7 +68,7 @@
               inset 0 0 calc(15px * var(--accent-intensity)) hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.15);
 }
 
-/* پس‌زمینه داخلی برای ایجاد ضخامت دقیق و شارپ بردر بدون باگ ماسک */
+/* Internal background layer for precise thickness and sharp borders without mask bugs */
 .panel::before {
   content: "";
   position: absolute;
@@ -85,7 +85,7 @@
   pointer-events: none;
 }
 
-/* افکت نورانی حاشیه‌ای پویا (Cyberpunk Edge Highlight) */
+/* Cyberpunk dynamic edge glow highlight */
 .panel::after {
   content: "";
   position: absolute;
@@ -103,13 +103,13 @@
   box-shadow: inset 0 0 10px hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.4);
 }
 
-/* تضمین قرارگیری محتوا روی لایه پس‌زمینه */
+/* Ensure content stays above background layers */
 .panel > * {
   position: relative;
   z-index: 3;
 }
 
-/* نوار پیشرفت (Gauge) مدرن */
+/* Modern gauge progress bar */
 .gauge {
   height: 6px;
   width: 100%;
@@ -128,7 +128,7 @@
   position: relative;
 }
 
-/* افکت درخشش متحرک روی Gauge */
+/* Animated shine effect on gauge fill */
 .gauge__fill::after {
   content: "";
   position: absolute;
@@ -145,7 +145,7 @@
   100% { transform: translateX(200px); }
 }
 
-/* ماژول گلایچ و اسکن‌لاین پیشرفته */
+/* Advanced glitch container & CRT scanlines module */
 .glitch-container {
   position: relative;
   overflow: hidden;
@@ -174,7 +174,7 @@
   transition: opacity 0.2s ease;
 }
 
-/* انیمیشن وضعیت بحرانی با رعایت دسترسی‌پذیری و بهینه‌سازی GPU */
+/* Critical status animation respecting accessibility and GPU acceleration */
 @keyframes terminal-flicker {
   0%, 100% { opacity: 1; transform: translate3d(0, 0, 0); }
   20% { opacity: 0.82; transform: skewX(0.5deg) translate3d(-0.5px, 0, 0); }
@@ -190,7 +190,7 @@
   }
 }
 
-/* تایپوگرافی مهندسی */
+/* Engineering-grade telemetry typography */
 .hud-text {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
