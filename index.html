@@ -6,45 +6,45 @@
 
 /**
  * @typedef {Object} Entity
- * @property {number} x - موقعیت فعلی X
- * @property {number} y - موقعیت فعلی Y
- * @property {number} [vx] - سرعت در راستای X (اختیاری برای محاسبات پیش‌بینی)
- * @property {number} [vy] - سرعت در راستای Y (اختیاری برای محاسبات پیش‌بینی)
+ * @property {number} x - Current X coordinate
+ * @property {number} y - Current Y coordinate
+ * @property {number} [vx] - Velocity along X (optional for predictive calculations)
+ * @property {number} [vy] - Velocity along Y (optional for predictive calculations)
  */
 
 /**
  * @typedef {Object} CCDHit
- * @property {number} t - زمان برخورد نرمال‌شده در بازه [0, 1]
- * @property {number} nx - بردار نرمال برخورد (خارج از مانع)
- * @property {number} ny - بردار نرمال برخورد
- * @property {boolean} [startedInside] - آیا از داخل مانع شروع شده است؟
- * @property {number} [depth] - عمق نفوذ در صورت شروع از داخل
+ * @property {number} t - Normalized time of impact in the range [0, 1]
+ * @property {number} nx - Collision normal vector X (pointing out of obstacle)
+ * @property {number} ny - Collision normal vector Y
+ * @property {boolean} [startedInside] - Whether the entity started inside an obstacle
+ * @property {number} [depth] - Penetration depth when started inside
  */
 
 /**
  * @typedef {Object} CCDOptions
- * @property {number} [maxIters=8] - حداکثر تکرار برای حل برخوردهای چندگانه
- * @property {number} [skin=0.002] - لایه محافظ برای جلوگیری از چسبیدن به سطح
- * @property {number} [minMove=1e-6] - آستانه حداقل حرکت برای متوقف کردن محاسبات
- * @property {number} [normalEpsilon=1e-8] - خطای مجاز محاسبات برداری
- * @property {number} [duplicateDot=0.999] - آستانه تشخیص سطوح موازی تکراری
- * @property {number} [friction=0.1] - ضریب اصطکاک سطحی [0, 1]
- * @property {number} [restitution=0] - ضریب بازتاب (ارتجاع) [0, 1]
- * @property {boolean} [collectHits=false] - جمع‌آوری آرایه کامل برخوردها
- * @property {boolean} [trackPath=false] - ثبت نقاط میانی حرکت برای درون‌یابی (Interpolation)
- * @property {number} [cornerBias=1e-4] - بایاس حرکتی برای عبور نرم از لبه‌ها و گوشه‌ها
+ * @property {number} [maxIters=8] - Maximum iterations to resolve multiple collisions
+ * @property {number} [skin=0.002] - Protective margin layer to prevent surface sticking
+ * @property {number} [minMove=1e-6] - Minimum movement threshold to halt calculations
+ * @property {number} [normalEpsilon=1e-8] - Allowed tolerance for vector calculations
+ * @property {number} [duplicateDot=0.999] - Threshold for detecting parallel duplicate planes
+ * @property {number} [friction=0.1] - Surface friction coefficient [0, 1]
+ * @property {number} [restitution=0] - Bounciness / restitution coefficient [0, 1]
+ * @property {boolean} [collectHits=false] - Collect an array of all collision hits
+ * @property {boolean} [trackPath=false] - Track intermediate movement waypoints for interpolation
+ * @property {number} [cornerBias=1e-4] - Movement bias to smoothly pass through edges and corners
  */
 
 /**
- * حرکت پیوسته دایره (Swept-Circle) همراه با حل دقیق لغزش، اصطکاک و برخوردهای چندگانه.
+ * Continuous Swept-Circle movement resolving slide, friction, and multi-collision constraints.
  * 
- * @param {Entity} entity - شیء مورد نظر شامل مختصات x و y
- * @param {number} dx - جابجایی درخواستی در محور X
- * @param {number} dy - جابجایی درخواستی در محور Y
- * @param {number} radius - شعاع دایره برخورد
- * @param {Function} castCircle - تابع بازبینی برخورد (Raycast/ShapeCast)
- * @param {CCDOptions} [opts={}] - تنظیمات پیشرفته فیزیک
- * @returns {Object} نتیجه نهایی حرکت، وضعیت برخوردها و آمارهای فیزیکی
+ * @param {Entity} entity - Target entity containing x and y coordinates
+ * @param {number} dx - Requested displacement along the X axis
+ * @param {number} dy - Requested displacement along the Y axis
+ * @param {number} radius - Collision circle radius
+ * @param {Function} castCircle - Collision query function (Raycast/ShapeCast)
+ * @param {CCDOptions} [opts={}] - Advanced physics configuration options
+ * @returns {Object} Final movement results, collision states, and physics statistics
  */
 function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
   validateInputs(entity, dx, dy, radius, castCircle);
@@ -74,7 +74,7 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
   const collisions = collectHits ? [] : null;
   const waypoints = trackPath ? [{ x: startX, y: startY }] : null;
 
-  // استفاده از Float64Array برای بهینه‌سازی حافظه و جلوگیری از GC Overhead
+  // Use Float64Array for memory optimization and to prevent Garbage Collection (GC) overhead
   const planesX = new Float64Array(maxIters);
   const planesY = new Float64Array(maxIters);
   let planeCount = 0;
@@ -115,7 +115,7 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
     const ny = hit.ny / normalLength;
     const t = clamp(hit.t, 0, 1);
 
-    // مدیریت نفوذ اولیه (Initial Overlap)
+    // Handle initial overlap state
     if (hit.startedInside === true) {
       startedInside = true;
 
@@ -156,7 +156,7 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
     remX *= remainingFraction;
     remY *= remainingFraction;
 
-    // ثبت صفحه برخورد منحصر به فرد با فیلتر موازی‌بودن
+    // Register unique contact plane with parallelism filter
     let duplicatePlane = false;
     for (let i = 0; i < planeCount; i++) {
       const planeDot = planesX[i] * nx + planesY[i] * ny;
@@ -172,7 +172,7 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
       planeCount++;
     }
 
-    // اعمال اصطکاک و بازتاب (Friction & Restitution) روی بردار باقی‌مانده
+    // Apply friction and restitution against the remaining velocity vector
     const intoSurface = remX * nx + remY * ny;
     if (intoSurface < -normalEpsilon) {
       const normalX = nx * intoSurface;
@@ -186,8 +186,8 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
       remY = tangentY - normalY * restitution;
     }
 
-    // پروژکسیون چندمرحله‌ای روی محدوده‌های برخورد (Constraint Projection)
-    const maxProjectionPasses = Math.max(2, planeCount); // افزایش دقت در گوشه‌ها
+    // Multi-pass constraint projection against accumulated contact planes
+    const maxProjectionPasses = Math.max(2, planeCount); // Enhance corner resolution accuracy
     for (let pass = 0; pass < maxProjectionPasses; pass++) {
       let changed = false;
 
@@ -206,13 +206,13 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
       if (!changed) break;
     }
 
-    // افزودن Corner Bias برای جلوگیری از گیر کردن در تقاطع دیوارها
+    // Add corner bias to prevent snagging at wall intersections
     if (planeCount >= 2 && cornerBias > 0) {
       remX += (nx * cornerBias);
       remY += (ny * cornerBias);
     }
 
-    // اعتبارسنجی نهایی صفحات
+    // Final validation check for all planes
     let violatesPlane = false;
     for (let i = 0; i < planeCount; i++) {
       const dot = remX * planesX[i] + remY * planesY[i];
@@ -263,7 +263,7 @@ function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
   return result;
 }
 
-// ==================== کمکی‌ها (Validation & Helpers) ====================
+// ==================== Validation & Helper Utilities ====================
 
 function validateInputs(entity, dx, dy, radius, castCircle) {
   if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
