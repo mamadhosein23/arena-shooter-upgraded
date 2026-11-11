@@ -1,17 +1,19 @@
-<div class="hud hud--glass" data-theme="dark">
+<div class="hud" data-theme="dark">
   <div class="hud-grid">
 
     <!-- بحران (Critical) -->
     <section class="hud-panel" data-status="critical" aria-labelledby="reactor-title">
       <span class="hud-bracket hud-bracket--tl"></span>
       <span class="hud-bracket hud-bracket--br"></span>
+      <span class="hud-base-line"></span>
+      <span class="hud-arrows"><span>&lt;&gt;</span></span>
 
-      <div class="hud-ring" role="img" aria-label="Reactor load 82%">
-        <svg class="hud-ring__svg" viewBox="0 0 80 80" aria-hidden="true">
-          <circle class="hud-ring__track" cx="40" cy="40" r="40"></circle>
-          <circle class="hud-ring__arc" cx="40" cy="40" r="40"
-                  style="--ring-val: 0.82"></circle>
-        </svg>
+      <div class="hud-radar" role="img" aria-label="Reactor scanning">
+        <span class="hud-radar__ring"></span>
+        <span class="hud-radar__ring hud-radar__ring--mid"></span>
+        <span class="hud-radar__ring hud-radar__ring--inner"></span>
+        <span class="hud-radar__sweep"></span>
+        <span class="hud-radar__core"></span>
       </div>
 
       <p class="hud-kicker hud-kicker--blink">◈ Critical · Reactor 01</p>
@@ -28,13 +30,15 @@
     <section class="hud-panel" data-status="active" aria-labelledby="network-title">
       <span class="hud-bracket hud-bracket--tl"></span>
       <span class="hud-bracket hud-bracket--br"></span>
+      <span class="hud-base-line"></span>
+      <span class="hud-arrows"><span>&lt;&gt;</span></span>
 
-      <div class="hud-ring" role="img" aria-label="Quantum link 45%">
-        <svg class="hud-ring__svg" viewBox="0 0 80 80" aria-hidden="true">
-          <circle class="hud-ring__track" cx="40" cy="40" r="40"></circle>
-          <circle class="hud-ring__arc hud-ring__arc--spin" cx="40" cy="40" r="40"
-                  style="--ring-val: 0.45"></circle>
-        </svg>
+      <div class="hud-radar" role="img" aria-label="Node scanning">
+        <span class="hud-radar__ring"></span>
+        <span class="hud-radar__ring hud-radar__ring--mid"></span>
+        <span class="hud-radar__ring hud-radar__ring--inner"></span>
+        <span class="hud-radar__sweep"></span>
+        <span class="hud-radar__core"></span>
       </div>
 
       <p class="hud-kicker">◉ Active · Node 02</p>
@@ -51,13 +55,15 @@
     <section class="hud-panel" data-status="success" aria-labelledby="shield-title">
       <span class="hud-bracket hud-bracket--tl"></span>
       <span class="hud-bracket hud-bracket--br"></span>
+      <span class="hud-base-line"></span>
+      <span class="hud-arrows"><span>&lt;&gt;</span></span>
 
-      <div class="hud-ring" role="img" aria-label="Defense integrity 100%">
-        <svg class="hud-ring__svg" viewBox="0 0 80 80" aria-hidden="true">
-          <circle class="hud-ring__track" cx="40" cy="40" r="40"></circle>
-          <circle class="hud-ring__arc" cx="40" cy="40" r="40"
-                  style="--ring-val: 1"></circle>
-        </svg>
+      <div class="hud-radar" role="img" aria-label="Defense scanning">
+        <span class="hud-radar__ring"></span>
+        <span class="hud-radar__ring hud-radar__ring--mid"></span>
+        <span class="hud-radar__ring hud-radar__ring--inner"></span>
+        <span class="hud-radar__sweep"></span>
+        <span class="hud-radar__core"></span>
       </div>
 
       <p class="hud-kicker">✦ Secure · Grid Alpha</p>
