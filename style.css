@@ -1,201 +1,286 @@
-/**
- * Cyberpunk / Sci-Fi HUD Design System - Enterprise Grade
- * Optimized for GPU Acceleration & High-Performance Rendering
- * Author: محمدحسین (Refactored & Enhanced)
- */
+/* Cyberpunk HUD — scoped, themeable, accessible */
 
-:root {
-  /* Base color and geometric specifications */
-  --sys-hue: 170;
-  --sys-saturation: 100%;
-  --sys-lightness: 55%;
-  --sys-primary: hsl(var(--sys-hue) var(--sys-saturation) var(--sys-lightness));
-  --sys-bg: #02040a;
-  --sys-surface: rgba(8, 16, 34, 0.96);
-  
-  --corner-size: 10px;
-  --border-width: 1px;
-  --timing-fn: cubic-bezier(0.19, 1, 0.22, 1);
-  --accent-intensity: 1;
+.hud {
+  color-scheme: dark;
 
-  /* Chamfer polygon clip-path core definition */
-  --clip-cut: polygon(
-    0 0,
-    100% 0,
-    100% calc(100% - var(--corner-size)),
-    calc(100% - var(--corner-size)) 100%,
-    0 100%
-  );
+  --hud-bg: #050914;
+  --hud-surface: rgb(9 20 37 / 94%);
+  --hud-surface-solid: #091425;
+  --hud-text: #e9f8fc;
+  --hud-muted: #adc4ce;
+  --hud-grid: rgb(95 224 232 / 7%);
+  --hud-accent-lightness: 63%;
+
+  color: var(--hud-text);
+  background-color: var(--hud-bg);
+  background-image:
+    radial-gradient(circle at 85% 0%, rgb(33 183 194 / 13%), transparent 35%),
+    linear-gradient(var(--hud-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hud-grid) 1px, transparent 1px);
+  background-size: auto, 28px 28px, 28px 28px;
+
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular,
+    Menlo, Consolas, monospace;
 }
 
-/* Dynamic data-driven state selectors */
-[data-status="critical"] { 
-  --sys-hue: 345; 
-  --sys-lightness: 50%;
-  --accent-intensity: 1.6; 
-}
-
-[data-status="warning"] {
-  --sys-hue: 40;
-  --sys-lightness: 55%;
-  --accent-intensity: 1.3;
-}
-
-[data-status="active"] { 
-  --sys-hue: 170; 
-  --sys-lightness: 55%;
-  --accent-intensity: 1; 
-}
-
-[data-status="success"] {
-  --sys-hue: 120;
-  --sys-lightness: 50%;
-  --accent-intensity: 1;
-}
-
-/* Advanced UI panel module */
-.panel {
-  position: relative;
-  contain: paint layout;
-  padding: calc(18px + var(--border-width));
-  background: hsl(var(--sys-hue) var(--sys-saturation) 60% / calc(0.35 * var(--accent-intensity)));
-  clip-path: var(--clip-cut);
-  isolation: isolate;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: background 0.3s var(--timing-fn), box-shadow 0.3s var(--timing-fn);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5),
-              inset 0 0 calc(15px * var(--accent-intensity)) hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.15);
-}
-
-/* Internal background layer for precise thickness and sharp borders without mask bugs */
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: var(--border-width);
-  background: linear-gradient(135deg, var(--sys-surface), rgba(2, 4, 10, 0.99));
-  clip-path: polygon(
-    0 0,
-    100% 0,
-    100% calc(100% - (var(--corner-size) - var(--border-width) * 0.414)),
-    calc(100% - (var(--corner-size) - var(--border-width) * 0.414)) 100%,
-    0 100%
-  );
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* Cyberpunk dynamic edge glow highlight */
-.panel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: var(--border-width) solid hsl(var(--sys-hue) var(--sys-saturation) var(--sys-lightness) / 0.6);
-  clip-path: var(--clip-cut);
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0.8;
-  transition: opacity 0.2s ease;
-}
-
-.panel:hover::after {
-  opacity: 1;
-  box-shadow: inset 0 0 10px hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.4);
-}
-
-/* Ensure content stays above background layers */
-.panel > * {
-  position: relative;
-  z-index: 3;
-}
-
-/* Modern gauge progress bar */
-.gauge {
-  height: 6px;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-  position: relative;
-  overflow: hidden;
-  border-radius: 1px;
-}
-
-.gauge__fill {
-  height: 100%;
-  width: var(--progress, 50%);
-  background: var(--sys-primary);
-  box-shadow: 0 0 calc(12px * var(--accent-intensity)) hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.7);
-  transition: width 0.5s var(--timing-fn), background-color 0.3s;
-  position: relative;
-}
-
-/* Animated shine effect on gauge fill */
-.gauge__fill::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 20px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
-  animation: gauge-shine 2s infinite linear;
-}
-
-@keyframes gauge-shine {
-  0% { transform: translateX(-100px); }
-  100% { transform: translateX(200px); }
-}
-
-/* Advanced glitch container & CRT scanlines module */
-.glitch-container {
-  position: relative;
-  overflow: hidden;
-}
-
-.glitch-container::before {
-  content: " ";
-  display: block;
-  position: absolute;
-  top: 0; left: 0; bottom: 0; right: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-  background-size: 100% 4px;
-  z-index: 10;
-  pointer-events: none;
-  opacity: 0.6;
-}
-
-.glitch-container::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.12);
-  mix-blend-mode: overlay;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-}
-
-/* Critical status animation respecting accessibility and GPU acceleration */
-@keyframes terminal-flicker {
-  0%, 100% { opacity: 1; transform: translate3d(0, 0, 0); }
-  20% { opacity: 0.82; transform: skewX(0.5deg) translate3d(-0.5px, 0, 0); }
-  40% { opacity: 0.96; transform: skewX(-0.3deg); }
-  60% { opacity: 0.88; transform: translate3d(1px, -0.5px, 0); }
-  80% { opacity: 0.94; transform: skewX(0.2deg); }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  [data-status="critical"] .panel {
-    will-change: transform, opacity;
-    animation: terminal-flicker 0.16s steps(3) infinite;
+/* Automatic light theme when no explicit theme is selected */
+@media (prefers-color-scheme: light) {
+  .hud:not([data-theme]) {
+    color-scheme: light;
+    --hud-bg: #edf4f7;
+    --hud-surface: rgb(255 255 255 / 95%);
+    --hud-surface-solid: #fff;
+    --hud-text: #102b35;
+    --hud-muted: #49626d;
+    --hud-grid: rgb(16 72 82 / 8%);
+    --hud-accent-lightness: 35%;
   }
 }
 
-/* Engineering-grade telemetry typography */
-.hud-text {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  letter-spacing: 0.18em;
+/* Manual override: <div class="hud" data-theme="light"> */
+.hud[data-theme="light"] {
+  color-scheme: light;
+  --hud-bg: #edf4f7;
+  --hud-surface: rgb(255 255 255 / 95%);
+  --hud-surface-solid: #fff;
+  --hud-text: #102b35;
+  --hud-muted: #49626d;
+  --hud-grid: rgb(16 72 82 / 8%);
+  --hud-accent-lightness: 35%;
+}
+
+.hud-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+/* Status belongs to each panel; several statuses can coexist on one screen. */
+.hud-panel {
+  --hud-hue: 174;
+  --hud-accent: hsl(
+    var(--hud-hue) 90% var(--hud-accent-lightness)
+  );
+  --hud-frame: hsl(
+    var(--hud-hue) 90% var(--hud-accent-lightness) / 75%
+  );
+
+  --cut: 14px;
+  --stroke: 1px;
+
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  padding: 1.35rem;
+  overflow: hidden;
+
+  /* The outer polygon is the actual panel silhouette. */
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%
+  );
+
+  background: var(--hud-frame);
+  transition: background-color 180ms ease;
+}
+
+/* Inset polygon creates a real border along the chamfered corner. */
+.hud-panel::before {
+  content: "";
+  position: absolute;
+  inset: var(--stroke);
+  z-index: 0;
+  pointer-events: none;
+  background: var(--hud-surface);
+
+  /* Parallel 45° edge: inner cut ≈ outer cut − 0.586 × stroke. */
+  --inner-cut: calc(var(--cut) - var(--stroke) * 0.586);
+
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--inner-cut)),
+    calc(100% - var(--inner-cut)) 100%,
+    0 100%
+  );
+}
+
+/* Small decorative detail; no perpetual full-panel animation. */
+.hud-panel::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1.35rem;
+  width: 4.5rem;
+  height: 2px;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--hud-accent);
+  box-shadow: 0 0 12px var(--hud-accent);
+}
+
+.hud-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hud-panel:hover,
+.hud-panel:focus-within {
+  --hud-frame: var(--hud-accent);
+}
+
+.hud-panel[data-status="critical"] { --hud-hue: 345; }
+.hud-panel[data-status="warning"]  { --hud-hue: 36; }
+.hud-panel[data-status="active"]   { --hud-hue: 174; }
+.hud-panel[data-status="success"]  { --hud-hue: 145; }
+
+.hud-kicker {
+  margin: 0 0 0.6rem;
+  color: var(--hud-accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: hsl(var(--sys-hue) var(--sys-saturation) 80%);
-  text-shadow: 0 0 8px hsl(var(--sys-hue) var(--sys-saturation) 50% / 0.4);
+}
+
+.hud-title {
+  margin: 0;
+  color: var(--hud-text);
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  line-height: 1.3;
+}
+
+.hud-copy {
+  margin: 0.7rem 0 1rem;
+  color: var(--hud-muted);
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+/* Native progress is preferable to a decorative div for semantics. */
+.hud-progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 2px;
+  background: rgb(127 150 160 / 18%);
+  accent-color: var(--hud-accent);
+}
+
+.hud-progress::-webkit-progress-bar {
+  background: rgb(127 150 160 / 18%);
+  border-radius: 2px;
+}
+
+.hud-progress::-webkit-progress-value {
+  background: var(--hud-accent);
+  border-radius: 2px;
+}
+
+.hud-progress::-moz-progress-bar {
+  background: var(--hud-accent);
+  border-radius: 2px;
+}
+
+.hud-button {
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--hud-accent);
+  background: transparent;
+  color: var(--hud-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.hud-button:hover {
+  background: hsl(var(--hud-hue) 90% 50% / 12%);
+}
+
+.hud-button:focus-visible {
+  outline: 2px solid var(--hud-accent);
+  outline-offset: 3px;
+}
+
+/* Optional glass effect: enable only where the backdrop justifies its cost. */
+@supports (backdrop-filter: blur(8px)) {
+  .hud--glass .hud-panel {
+    backdrop-filter: blur(8px);
+  }
+}
+
+/* Animate a small indicator rather than flashing an entire critical panel. */
+.hud-indicator {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-inline-end: 0.4rem;
+  border-radius: 50%;
+  background: var(--hud-accent);
+  vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hud-panel[data-status="critical"] .hud-indicator {
+    animation: hud-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes hud-pulse {
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-panel,
+  .hud-button {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .hud--glass .hud-panel {
+    backdrop-filter: none;
+  }
+
+  .hud-panel::before {
+    background: var(--hud-surface-solid);
+  }
+}
+
+@media (forced-colors: active) {
+  .hud-panel {
+    background: CanvasText;
+    clip-path: none;
+  }
+
+  .hud-panel::before {
+    background: Canvas;
+    clip-path: none;
+  }
+
+  .hud-panel::after {
+    display: none;
+  }
+
+  .hud-kicker,
+  .hud-indicator {
+    color: Highlight;
+    background: Highlight;
+  }
+
+  .hud-button {
+    border-color: ButtonText;
+    color: ButtonText;
+  }
+
+  .hud-button:focus-visible {
+    outline-color: Highlight;
+  }
 }
