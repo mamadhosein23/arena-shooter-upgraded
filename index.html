@@ -1,305 +1,50 @@
-/**
- * @fileoverview Robust 2D Kinematic Swept-Circle Move & Slide - Enterprise / Engine Grade
- * @author محمدحسین (Optimized & Refactored)
- * @license MIT
- */
+<div class="hud hud--glass" data-theme="dark">
+  <div class="hud-grid">
+    
+    <!-- پنل بحران (Critical) -->
+    <section class="hud-panel" data-status="critical" aria-labelledby="reactor-title">
+      <p class="hud-kicker">
+        <span class="hud-indicator" aria-hidden="true"></span>
+        Critical · Reactor 01
+      </p>
 
-/**
- * @typedef {Object} Entity
- * @property {number} x - Current X coordinate
- * @property {number} y - Current Y coordinate
- * @property {number} [vx] - Velocity along X (optional for predictive calculations)
- * @property {number} [vy] - Velocity along Y (optional for predictive calculations)
- */
+      <h2 class="hud-title" id="reactor-title">Core temperature</h2>
+      <p class="hud-copy">Temperature is approaching the safety threshold.</p>
 
-/**
- * @typedef {Object} CCDHit
- * @property {number} t - Normalized time of impact in the range [0, 1]
- * @property {number} nx - Collision normal vector X (pointing out of obstacle)
- * @property {number} ny - Collision normal vector Y
- * @property {boolean} [startedInside] - Whether the entity started inside an obstacle
- * @property {number} [depth] - Penetration depth when started inside
- */
+      <progress class="hud-progress" value="82" max="100" aria-label="Core temperature: 82 percent">82%</progress>
 
-/**
- * @typedef {Object} CCDOptions
- * @property {number} [maxIters=8] - Maximum iterations to resolve multiple collisions
- * @property {number} [skin=0.002] - Protective margin layer to prevent surface sticking
- * @property {number} [minMove=1e-6] - Minimum movement threshold to halt calculations
- * @property {number} [normalEpsilon=1e-8] - Allowed tolerance for vector calculations
- * @property {number} [duplicateDot=0.999] - Threshold for detecting parallel duplicate planes
- * @property {number} [friction=0.1] - Surface friction coefficient [0, 1]
- * @property {number} [restitution=0] - Bounciness / restitution coefficient [0, 1]
- * @property {boolean} [collectHits=false] - Collect an array of all collision hits
- * @property {boolean} [trackPath=false] - Track intermediate movement waypoints for interpolation
- * @property {number} [cornerBias=1e-4] - Movement bias to smoothly pass through edges and corners
- */
+      <button class="hud-button" type="button">View telemetry</button>
+    </section>
 
-/**
- * Continuous Swept-Circle movement resolving slide, friction, and multi-collision constraints.
- * 
- * @param {Entity} entity - Target entity containing x and y coordinates
- * @param {number} dx - Requested displacement along the X axis
- * @param {number} dy - Requested displacement along the Y axis
- * @param {number} radius - Collision circle radius
- * @param {Function} castCircle - Collision query function (Raycast/ShapeCast)
- * @param {CCDOptions} [opts={}] - Advanced physics configuration options
- * @returns {Object} Final movement results, collision states, and physics statistics
- */
-function moveEntityCCDAdvanced(entity, dx, dy, radius, castCircle, opts = {}) {
-  validateInputs(entity, dx, dy, radius, castCircle);
+    <!-- پنل فعال/عادی (Active) -->
+    <section class="hud-panel" data-status="active" aria-labelledby="network-title">
+      <p class="hud-kicker">
+        <span class="hud-indicator" aria-hidden="true"></span>
+        Active · Node 02
+      </p>
 
-  const maxIters = clampInt(finiteOption(opts.maxIters, 8, "maxIters"), 1, 32);
-  const skin = Math.max(0, finiteOption(opts.skin, 0.002, "skin"));
-  const minMove = Math.max(0, finiteOption(opts.minMove, 1e-6, "minMove"));
-  const normalEpsilon = Math.max(0, finiteOption(opts.normalEpsilon, 1e-8, "normalEpsilon"));
-  const duplicateDot = clamp(finiteOption(opts.duplicateDot, 0.999, "duplicateDot"), -1, 1);
-  const friction = clamp01(finiteOption(opts.friction, 0.1, "friction"));
-  const restitution = clamp01(finiteOption(opts.restitution, 0, "restitution"));
-  const collectHits = opts.collectHits === true;
-  const trackPath = opts.trackPath === true;
-  const cornerBias = Math.max(0, finiteOption(opts.cornerBias, 1e-4, "cornerBias"));
+      <h2 class="hud-title" id="network-title">Quantum Link</h2>
+      <p class="hud-copy">Data routing stable across primary subnets.</p>
 
-  const startX = entity.x;
-  const startY = entity.y;
+      <progress class="hud-progress" value="45" max="100" aria-label="Quantum Link load: 45 percent">45%</progress>
 
-  let remX = dx;
-  let remY = dy;
+      <button class="hud-button" type="button">Configure node</button>
+    </section>
 
-  let hitCount = 0;
-  let iterations = 0;
-  let blocked = false;
-  let startedInside = false;
+    <!-- پنل موفق (Success) -->
+    <section class="hud-panel" data-status="success" aria-labelledby="shield-title">
+      <p class="hud-kicker">
+        <span class="hud-indicator" aria-hidden="true"></span>
+        Secure · Grid Alpha
+      </p>
 
-  const collisions = collectHits ? [] : null;
-  const waypoints = trackPath ? [{ x: startX, y: startY }] : null;
+      <h2 class="hud-title" id="shield-title">Defense Matrix</h2>
+      <p class="hud-copy">All perimeter firewalls operating at peak efficiency.</p>
 
-  // Use Float64Array for memory optimization and to prevent Garbage Collection (GC) overhead
-  const planesX = new Float64Array(maxIters);
-  const planesY = new Float64Array(maxIters);
-  let planeCount = 0;
+      <progress class="hud-progress" value="100" max="100" aria-label="Defense integrity: 100 percent">100%</progress>
 
-  const minMoveSq = minMove * minMove;
+      <button class="hud-button" type="button">Run diagnostics</button>
+    </section>
 
-  for (let iter = 0; iter < maxIters; iter++) {
-    const remLengthSq = remX * remX + remY * remY;
-
-    if (remLengthSq <= minMoveSq) {
-      remX = 0;
-      remY = 0;
-      break;
-    }
-
-    iterations = iter + 1;
-
-    const hit = castCircle(entity.x, entity.y, radius, remX, remY);
-
-    if (!hit) {
-      entity.x += remX;
-      entity.y += remY;
-      if (waypoints) waypoints.push({ x: entity.x, y: entity.y });
-
-      remX = 0;
-      remY = 0;
-      break;
-    }
-
-    validateHit(hit);
-
-    const normalLength = Math.hypot(hit.nx, hit.ny);
-    if (normalLength <= 1e-12) {
-      throw new TypeError("castCircle collision normal must have non-zero length");
-    }
-
-    const nx = hit.nx / normalLength;
-    const ny = hit.ny / normalLength;
-    const t = clamp(hit.t, 0, 1);
-
-    // Handle initial overlap state
-    if (hit.startedInside === true) {
-      startedInside = true;
-
-      if (!Number.isFinite(hit.depth) || hit.depth < 0) {
-        blocked = true;
-        break;
-      }
-
-      const pushDistance = hit.depth + skin;
-      entity.x += nx * pushDistance;
-      entity.y += ny * pushDistance;
-
-      if (waypoints) waypoints.push({ x: entity.x, y: entity.y });
-
-      if (collectHits) {
-        collisions.push({ t: 0, nx, ny, startedInside: true, depth: hit.depth });
-      }
-
-      hitCount++;
-      continue;
-    }
-
-    hitCount++;
-    if (collectHits) {
-      collisions.push({ t, nx, ny, startedInside: false });
-    }
-
-    const remLength = Math.sqrt(remLengthSq);
-    const skinFraction = remLength > 1e-12 ? skin / remLength : 0;
-    const advanceFraction = clamp(t - skinFraction, 0, 1);
-
-    entity.x += remX * advanceFraction;
-    entity.y += remY * advanceFraction;
-
-    if (waypoints) waypoints.push({ x: entity.x, y: entity.y });
-
-    const remainingFraction = 1 - t;
-    remX *= remainingFraction;
-    remY *= remainingFraction;
-
-    // Register unique contact plane with parallelism filter
-    let duplicatePlane = false;
-    for (let i = 0; i < planeCount; i++) {
-      const planeDot = planesX[i] * nx + planesY[i] * ny;
-      if (planeDot >= duplicateDot) {
-        duplicatePlane = true;
-        break;
-      }
-    }
-
-    if (!duplicatePlane && planeCount < maxIters) {
-      planesX[planeCount] = nx;
-      planesY[planeCount] = ny;
-      planeCount++;
-    }
-
-    // Apply friction and restitution against the remaining velocity vector
-    const intoSurface = remX * nx + remY * ny;
-    if (intoSurface < -normalEpsilon) {
-      const normalX = nx * intoSurface;
-      const normalY = ny * intoSurface;
-      const tangentScale = 1 - friction;
-
-      const tangentX = (remX - normalX) * tangentScale;
-      const tangentY = (remY - normalY) * tangentScale;
-
-      remX = tangentX - normalX * restitution;
-      remY = tangentY - normalY * restitution;
-    }
-
-    // Multi-pass constraint projection against accumulated contact planes
-    const maxProjectionPasses = Math.max(2, planeCount); // Enhance corner resolution accuracy
-    for (let pass = 0; pass < maxProjectionPasses; pass++) {
-      let changed = false;
-
-      for (let i = 0; i < planeCount; i++) {
-        const px = planesX[i];
-        const py = planesY[i];
-        const intoPlane = remX * px + remY * py;
-
-        if (intoPlane < -normalEpsilon) {
-          remX -= px * intoPlane;
-          remY -= py * intoPlane;
-          changed = true;
-        }
-      }
-
-      if (!changed) break;
-    }
-
-    // Add corner bias to prevent snagging at wall intersections
-    if (planeCount >= 2 && cornerBias > 0) {
-      remX += (nx * cornerBias);
-      remY += (ny * cornerBias);
-    }
-
-    // Final validation check for all planes
-    let violatesPlane = false;
-    for (let i = 0; i < planeCount; i++) {
-      const dot = remX * planesX[i] + remY * planesY[i];
-      if (dot < -normalEpsilon) {
-        violatesPlane = true;
-        break;
-      }
-    }
-
-    if (violatesPlane) {
-      remX = 0;
-      remY = 0;
-      blocked = true;
-      break;
-    }
-
-    if (remX * remX + remY * remY <= minMoveSq) {
-      remX = 0;
-      remY = 0;
-      break;
-    }
-
-    if (t <= 1e-12 && remX * nx + remY * ny >= -normalEpsilon) {
-      blocked = true;
-      break;
-    }
-  }
-
-  const remainingLengthSq = remX * remX + remY * remY;
-
-  const result = {
-    x: entity.x,
-    y: entity.y,
-    movedX: entity.x - startX,
-    movedY: entity.y - startY,
-    remainingX: remX,
-    remainingY: remY,
-    hitCount,
-    iterations,
-    blocked,
-    startedInside,
-    truncated: remainingLengthSq > minMoveSq && iterations >= maxIters,
-  };
-
-  if (collectHits) result.collisions = collisions;
-  if (waypoints) result.waypoints = waypoints;
-
-  return result;
-}
-
-// ==================== Validation & Helper Utilities ====================
-
-function validateInputs(entity, dx, dy, radius, castCircle) {
-  if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
-    throw new TypeError("Entity must have finite x and y coordinates.");
-  }
-  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
-    throw new TypeError("Displacement vector (dx, dy) must be finite numbers.");
-  }
-  if (!Number.isFinite(radius) || radius < 0) {
-    throw new RangeError("Radius must be a finite non-negative number.");
-  }
-  if (typeof castCircle !== "function") {
-    throw new TypeError("castCircle argument must be a valid function.");
-  }
-}
-
-function validateHit(hit) {
-  if (!hit || !Number.isFinite(hit.t) || !Number.isFinite(hit.nx) || !Number.isFinite(hit.ny)) {
-    throw new TypeError("castCircle returned an invalid hit structure.");
-  }
-}
-
-function finiteOption(value, fallback, name) {
-  if (value === undefined) return fallback;
-  if (!Number.isFinite(value)) throw new TypeError(`Option '${name}' must be a finite number.`);
-  return value;
-}
-
-function clampInt(value, min, max) {
-  return Math.min(max, Math.max(min, Math.floor(value)));
-}
-
-function clamp01(value) {
-  return clamp(value, 0, 1);
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
+  </div>
+</div>
