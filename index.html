@@ -1,47 +1,71 @@
 <div class="hud hud--glass" data-theme="dark">
   <div class="hud-grid">
-    
-    <!-- پنل بحران (Critical) -->
+
+    <!-- بحران (Critical) -->
     <section class="hud-panel" data-status="critical" aria-labelledby="reactor-title">
-      <p class="hud-kicker">
-        <span class="hud-indicator" aria-hidden="true"></span>
-        Critical · Reactor 01
-      </p>
+      <span class="hud-bracket hud-bracket--tl"></span>
+      <span class="hud-bracket hud-bracket--br"></span>
 
+      <div class="hud-ring" role="img" aria-label="Reactor load 82%">
+        <svg class="hud-ring__svg" viewBox="0 0 80 80" aria-hidden="true">
+          <circle class="hud-ring__track" cx="40" cy="40" r="40"></circle>
+          <circle class="hud-ring__arc" cx="40" cy="40" r="40"
+                  style="--ring-val: 0.82"></circle>
+        </svg>
+      </div>
+
+      <p class="hud-kicker hud-kicker--blink">◈ Critical · Reactor 01</p>
       <h2 class="hud-title" id="reactor-title">Core temperature</h2>
-      <p class="hud-copy">Temperature is approaching the safety threshold.</p>
+      <p class="hud-copy">Temperature approaching the safety threshold.</p>
 
-      <progress class="hud-progress" value="82" max="100" aria-label="Core temperature: 82 percent">82%</progress>
+      <progress class="hud-progress" value="82" max="100"
+                aria-label="Core temperature: 82 percent">82%</progress>
 
       <button class="hud-button" type="button">View telemetry</button>
     </section>
 
-    <!-- پنل فعال/عادی (Active) -->
+    <!-- فعال (Active) -->
     <section class="hud-panel" data-status="active" aria-labelledby="network-title">
-      <p class="hud-kicker">
-        <span class="hud-indicator" aria-hidden="true"></span>
-        Active · Node 02
-      </p>
+      <span class="hud-bracket hud-bracket--tl"></span>
+      <span class="hud-bracket hud-bracket--br"></span>
 
+      <div class="hud-ring" role="img" aria-label="Quantum link 45%">
+        <svg class="hud-ring__svg" viewBox="0 0 80 80" aria-hidden="true">
+          <circle class="hud-ring__track" cx="40" cy="40" r="40"></circle>
+          <circle class="hud-ring__arc hud-ring__arc--spin" cx="40" cy="40" r="40"
+                  style="--ring-val: 0.45"></circle>
+        </svg>
+      </div>
+
+      <p class="hud-kicker">◉ Active · Node 02</p>
       <h2 class="hud-title" id="network-title">Quantum Link</h2>
       <p class="hud-copy">Data routing stable across primary subnets.</p>
 
-      <progress class="hud-progress" value="45" max="100" aria-label="Quantum Link load: 45 percent">45%</progress>
+      <progress class="hud-progress" value="45" max="100"
+                aria-label="Quantum link load: 45 percent">45%</progress>
 
       <button class="hud-button" type="button">Configure node</button>
     </section>
 
-    <!-- پنل موفق (Success) -->
+    <!-- موفق (Success) -->
     <section class="hud-panel" data-status="success" aria-labelledby="shield-title">
-      <p class="hud-kicker">
-        <span class="hud-indicator" aria-hidden="true"></span>
-        Secure · Grid Alpha
-      </p>
+      <span class="hud-bracket hud-bracket--tl"></span>
+      <span class="hud-bracket hud-bracket--br"></span>
 
+      <div class="hud-ring" role="img" aria-label="Defense integrity 100%">
+        <svg class="hud-ring__svg" viewBox="0 0 80 80" aria-hidden="true">
+          <circle class="hud-ring__track" cx="40" cy="40" r="40"></circle>
+          <circle class="hud-ring__arc" cx="40" cy="40" r="40"
+                  style="--ring-val: 1"></circle>
+        </svg>
+      </div>
+
+      <p class="hud-kicker">✦ Secure · Grid Alpha</p>
       <h2 class="hud-title" id="shield-title">Defense Matrix</h2>
-      <p class="hud-copy">All perimeter firewalls operating at peak efficiency.</p>
+      <p class="hud-copy">All perimeter firewalls at peak efficiency.</p>
 
-      <progress class="hud-progress" value="100" max="100" aria-label="Defense integrity: 100 percent">100%</progress>
+      <progress class="hud-progress" value="100" max="100"
+                aria-label="Defense integrity: 100 percent">100%</progress>
 
       <button class="hud-button" type="button">Run diagnostics</button>
     </section>
