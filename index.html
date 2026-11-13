@@ -3,12 +3,14 @@
 
     <!-- بحران (Critical) -->
     <section class="hud-panel" data-status="critical" aria-labelledby="reactor-title">
+      <!-- براکت‌های گوشه و خط پایه -->
       <span class="hud-bracket hud-bracket--tl"></span>
       <span class="hud-bracket hud-bracket--br"></span>
       <span class="hud-base-line"></span>
       <span class="hud-arrows"><span>&lt;&gt;</span></span>
 
-      <div class="hud-radar" role="img" aria-label="Reactor scanning">
+      <!-- رادار -->
+      <div class="hud-radar" role="img" aria-label="Reactor scanning visualization">
         <span class="hud-radar__ring"></span>
         <span class="hud-radar__ring hud-radar__ring--mid"></span>
         <span class="hud-radar__ring hud-radar__ring--inner"></span>
@@ -16,13 +18,18 @@
         <span class="hud-radar__core"></span>
       </div>
 
+      <!-- متن وضعیت -->
       <p class="hud-kicker hud-kicker--blink">◈ Critical · Reactor 01</p>
+      <!-- عنوان اصلی -->
       <h2 class="hud-title" id="reactor-title">Core temperature</h2>
+      <!-- توضیح مختصر -->
       <p class="hud-copy">Temperature approaching the safety threshold.</p>
 
+      <!-- نوار پیشرفت -->
       <progress class="hud-progress" value="82" max="100"
                 aria-label="Core temperature: 82 percent">82%</progress>
 
+      <!-- دکمه عمل -->
       <button class="hud-button" type="button">View telemetry</button>
     </section>
 
@@ -33,7 +40,7 @@
       <span class="hud-base-line"></span>
       <span class="hud-arrows"><span>&lt;&gt;</span></span>
 
-      <div class="hud-radar" role="img" aria-label="Node scanning">
+      <div class="hud-radar" role="img" aria-label="Node scanning visualization">
         <span class="hud-radar__ring"></span>
         <span class="hud-radar__ring hud-radar__ring--mid"></span>
         <span class="hud-radar__ring hud-radar__ring--inner"></span>
@@ -58,7 +65,7 @@
       <span class="hud-base-line"></span>
       <span class="hud-arrows"><span>&lt;&gt;</span></span>
 
-      <div class="hud-radar" role="img" aria-label="Defense scanning">
+      <div class="hud-radar" role="img" aria-label="Defense scanning visualization">
         <span class="hud-radar__ring"></span>
         <span class="hud-radar__ring hud-radar__ring--mid"></span>
         <span class="hud-radar__ring hud-radar__ring--inner"></span>
